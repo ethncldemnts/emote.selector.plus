@@ -1,0 +1,20 @@
+{
+  "KPlugin": {
+    "Authors": [
+    { "Email": "eianleebusiness@gmail.com", "Name": "Eian \"Ethan\" Lee" }
+    ],
+    "Id": "emote.selector.plus",
+    "Name": "Emoji Selector Plus",
+    "Description": "A panel-integrated emoji picker",
+    "Icon": "preferences-desktop-emoticons-symbolic",
+    "Website": "https://www.youtube.com/watch?v=ebOtetPlOzc",
+    "Version": "1.0.0",
+    "License": "GPL-3.0-or-later",
+    "Category": "Utilities",
+    "EnabledByDefault": true
+  },
+  "X-Plasma-NotificationArea": true,
+  "X-Plasma-NotificationAreaCategory": "SystemServices",
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
