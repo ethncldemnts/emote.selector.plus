@@ -36,9 +36,6 @@ Then run:
 contents/service/update_emoji.sh
 ```
 
-### Option C: In-App Sync Button
-Open the plasmoid configuration and press the Sync/Update Emoji button. It runs the Bash script and shows progress logs. If you previously saw "Permission denied", ensure the executable bit is set or rely on the updated command which now prefixes the script with `bash`.
-
 ### Sync Status Markers
 During sync the script writes markers to the log file the UI polls:
 - `SYNC_STARTED` – Sync began.
