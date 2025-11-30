@@ -4,7 +4,7 @@
     <img src="./emote.svg" alt="Emote" width="80" height="80">
   </a>
 
-  <h1 align="center">Emote Selector Plus</h1>
+  <h3 align="center">Emote Selector Plus</h3>
 
   <p align="center">
     A panel-integrated emote selector for KDE Plasma 6.
