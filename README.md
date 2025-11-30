@@ -1,4 +1,4 @@
-# <img src="./logo.svg" height="30" vertical-align="middle" alt="logo"/> Emote Selector Plus
+# <img src="./emote.svg" height="30" vertical-align="middle" alt="logo"/> Emote Selector Plus
 
 A panel-integrated emote selector for Plasma 6.
 
