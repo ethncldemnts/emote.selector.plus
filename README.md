@@ -1,6 +1,6 @@
-# Emoji Selector Plus
+# Emote Selector Plus
 
-A panel-integrated emoji picker for Plasma 6.
+A panel-integrated emote selector for Plasma 6.
 
 ## Install/Update
 
