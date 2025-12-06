@@ -7,6 +7,7 @@ import QtCore
 import org.kde.kquickcontrolsaddons as KQCA
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
+import org.kde.ksvg as KSvg
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.kirigami as Kirigami
@@ -834,19 +835,9 @@ Item {
         // ---------------------------------------------------------------------
         // Top Section (Search & Paste)
         // ---------------------------------------------------------------------
-        Rectangle {
+        Item {
             Layout.fillWidth: true
             implicitHeight: topSection.implicitHeight + 16
-            color: fullRoot.highContrastSectionColor
-            radius: Kirigami.Units.smallSpacing
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: parent.radius
-                color: parent.color
-            }
 
             ColumnLayout {
                 id: topSection
@@ -1083,12 +1074,10 @@ Item {
             spacing: 0
 
             // --- Sidebar ---
-            Rectangle {
+            Item {
                 Layout.fillHeight: true
                 Layout.preferredWidth: fullRoot.sidebarExpanded ? 180 : 32
                 Layout.maximumWidth: 180
-                color: fullRoot.lowContrastSectionColor
-                radius: Kirigami.Units.smallSpacing
 
                 Item {
                     anchors.fill: parent
@@ -1738,12 +1727,10 @@ Item {
             }
 
             // --- Emoji Grid ---
-            Rectangle {
+            Item {
                 id: emojiArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: fullRoot.lowContrastSectionColor
-                radius: Kirigami.Units.smallSpacing
 
                 readonly property bool showEmojiScrollBar: emojiGridView && emojiGridView.contentHeight > emojiGridView.height + 1
 
@@ -2053,12 +2040,10 @@ Item {
         // ---------------------------------------------------------------------
         // Bottom Section (Preview Bar)
         // ---------------------------------------------------------------------
-        Rectangle {
+        Item {
             id: previewBar
             Layout.fillWidth: true
             Layout.preferredHeight: topSection.implicitHeight + 16
-            color: fullRoot.highContrastSectionColor
-            radius: Kirigami.Units.smallSpacing
 
             RowLayout {
                 anchors.fill: parent
