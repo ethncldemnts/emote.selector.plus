@@ -4,50 +4,45 @@ import QtQuick.Layouts
 
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
-import org.kde.kquickcontrols as KQuickControls
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.core as PlasmaCore
-import org.kde.plasma.workspace.components as WorkspaceComponents
 import org.kde.plasma.plasma5support as Plasma5Support
-import org.kde.plasma.extras as PlasmaExtras
-
-import Qt.labs.platform as Platforms
 
 import "../../assets/emoji-icons.js" as EmojiIcons
 
 Kirigami.ScrollablePage {
-    id: displayConfigPage
+    id: root
 
     // =========================================================================
-    // Properties & Helper Functions
+    // Properties & Helpers
     // =========================================================================
 
-    property string smallSizeEmojiLabel: qsTr("Small")
-    property string largeSizeEmojiLabel: qsTr("Large")
-    property var emojiIconPool: EmojiIcons.iconEmojis || []
+    property string smallSizeEmojiLabel: i18n("Small")
+    property string largeSizeEmojiLabel: i18n("Large")
+    readonly property var emojiIconPool: EmojiIcons.iconEmojis || []
 
+    // Helper to calculate font size based on grid size
     function emojiFontPixelSize(gridSize) {
         const size = gridSize || 0
         const scaled = Math.floor(size * 0.7)
-        return scaled > 0 ? scaled : 16
+        return Math.max(scaled, 16)
     }
 
     function _randomEmojiFromPool() {
-        if (!emojiIconPool || emojiIconPool.length === 0) {
+        if (!root.emojiIconPool || root.emojiIconPool.length === 0) {
             return null
         }
-        return emojiIconPool[Math.floor(Math.random() * emojiIconPool.length)]
+        return root.emojiIconPool[Math.floor(Math.random() * root.emojiIconPool.length)]
     }
 
     function rollSizeEmojiLabels() {
         const emoji = _randomEmojiFromPool()
-
         if (emoji) {
-            smallSizeEmojiLabel = emoji
-            largeSizeEmojiLabel = emoji
+            root.smallSizeEmojiLabel = emoji
+            root.largeSizeEmojiLabel = emoji
         } else {
-            smallSizeEmojiLabel = qsTr("Small")
-            largeSizeEmojiLabel = qsTr("Large")
+            root.smallSizeEmojiLabel = i18n("Small")
+            root.largeSizeEmojiLabel = i18n("Large")
         }
     }
 
@@ -60,29 +55,25 @@ Kirigami.ScrollablePage {
     // =========================================================================
 
     ColumnLayout {
+        spacing: Kirigami.Units.smallSpacing
+
         Kirigami.FormLayout {
-            id: layout
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.smallSpacing
+            id: formLayout
+            Layout.fillWidth: true
 
             // --- Display Section ---
-
-            Kirigami.FormLayout {
-                wideMode: false
-                Kirigami.Separator {
-                    Kirigami.FormData.isSection: true
-                    Kirigami.FormData.label: "Display"
-                }
+            Kirigami.Separator {
+                Kirigami.FormData.label: i18n("Display")
+                Kirigami.FormData.isSection: true
             }
 
-            // Grid size slider
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: Kirigami.Units.smallSpacing
 
                 PlasmaComponents.Label {
-                    text: smallSizeEmojiLabel
-                    font.pixelSize: emojiFontPixelSize(gridSizeSlider.sizeValues[0])
+                    text: root.smallSizeEmojiLabel
+                    font.pixelSize: root.emojiFontPixelSize(gridSizeSlider.sizeValues[0])
                 }
 
                 PlasmaComponents.Slider {
@@ -91,330 +82,252 @@ Kirigami.ScrollablePage {
                     from: 0
                     to: 2
                     stepSize: 1
+                    snapMode: Slider.SnapAlways
 
-                    property var sizeValues: [36, 44, 56]
-                    property var sizeLabels: ["Small", "Medium", "Large"]
-
+                    readonly property var sizeValues: [36, 44, 56]
+                    
+                    // Bind value to config, fallback to Medium (index 1)
                     value: {
-                        const currentSize = plasmoid.configuration.GridSize
-                        if (currentSize <= 36) return 0
-                            if (currentSize <= 44) return 1
-                                return 2
+                        const current = plasmoid.configuration.GridSize
+                        if (current <= 36) return 0
+                        if (current >= 56) return 2
+                        return 1
                     }
 
-                    onValueChanged: {
+                    onMoved: {
                         plasmoid.configuration.GridSize = sizeValues[value]
-                    }
-
-                    Component.onCompleted: {
-                        // Set initial value based on configuration
-                        const configSize = plasmoid.configuration.GridSize
-                        if (configSize <= 36) value = 0
-                            else if (configSize <= 44) value = 1
-                                else value = 2
                     }
                 }
 
                 PlasmaComponents.Label {
-                    text: largeSizeEmojiLabel
-                    font.pixelSize: emojiFontPixelSize(gridSizeSlider.sizeValues[2])
+                    text: root.largeSizeEmojiLabel
+                    font.pixelSize: root.emojiFontPixelSize(gridSizeSlider.sizeValues[2])
                 }
             }
 
             // --- Behavior Section ---
-
-            Kirigami.FormLayout {
-                wideMode: false
-                Kirigami.Separator {
-                    Kirigami.FormData.isSection: true
-                    Kirigami.FormData.label: "Behavior"
-                }
+            Kirigami.Separator {
+                Kirigami.FormData.label: i18n("Behavior")
+                Kirigami.FormData.isSection: true
             }
 
-            // Close after selection checkbox
             PlasmaComponents.CheckBox {
                 text: i18n("Close popup after emoji selection")
                 checked: plasmoid.configuration.CloseAfterSelection
-                onCheckedChanged: plasmoid.configuration.CloseAfterSelection = checked
+                onToggled: plasmoid.configuration.CloseAfterSelection = checked
             }
 
-            // Keyboard navigation checkbox
             RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
+                spacing: Kirigami.Units.smallSpacing
 
                 PlasmaComponents.CheckBox {
                     text: i18n("Enable keyboard navigation")
                     checked: plasmoid.configuration.KeyboardNavigation
-                    onCheckedChanged: plasmoid.configuration.KeyboardNavigation = checked
-                    Layout.alignment: Qt.AlignVCenter
+                    onToggled: plasmoid.configuration.KeyboardNavigation = checked
                 }
 
                 PlasmaComponents.ToolButton {
-                    Layout.alignment: Qt.AlignVCenter
-                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
-
                     icon.name: "help-hint-symbolic"
-
+                    text: i18n("Help")
+                    display: PlasmaComponents.ToolButton.IconOnly
+                    
                     PlasmaComponents.ToolTip {
-                        text: "← ↑ → ↓: Navigate ui elements\nENTER: Copy emoji/s\nSHIFT+ENTER: Copy emoji/s name\nCTRL+ENTER: Select emoji/s\nTAB: Focus next element\nSHIFT+TAB: Focus previous element\nESC: Close popup"
+                        text: i18n("← ↑ → ↓: Navigate UI elements\nENTER: Copy emoji\nSHIFT+ENTER: Copy emoji name\nCTRL+ENTER: Select emoji\nTAB: Focus next\nSHIFT+TAB: Focus previous\nESC: Close popup")
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-
-                        cursorShape: Qt.WhatsThisCursor
-
-                        acceptedButtons: Qt.NoButton
-                    }
+                    
+                    // Prevent click, acts as a tooltip anchor only
+                    onPressed: mouse => mouse.accepted = false
                 }
             }
         }
 
         // --- Sync Section ---
-
-        // Sync emoji database button
-        PlasmaComponents.Button {
-            id: syncEmojiButton
-            // Always show the model's status text; disable during sync
-            text: syncEmojiModel.statusText
-            enabled: !syncEmojiModel.isSyncing
+        
+        // We use a simplified GroupBox-like look for the logs area
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            onClicked: {
-                syncEmojiModel.startSync()
+            // Wrapper to center the button robustly
+            RowLayout {
+                Layout.fillWidth: true
+                
+                Item { Layout.fillWidth: true } // Left spacer
+                
+                PlasmaComponents.Button {
+                    id: syncButton
+                    text: syncController.statusText
+                    enabled: !syncController.isSyncing
+                    icon.name: syncController.isSyncing ? "view-refresh-symbolic" : "download"
+                    
+                    onClicked: syncController.startSync()
+                }
+                
+                Item { Layout.fillWidth: true } // Right spacer
             }
-        }
-
-        // Log display area
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 120
-            color: PlasmaCore.Theme.backgroundColor
-            border.color: PlasmaCore.Theme.textColor
-            border.width: 1
-            radius: 4
-            visible: syncEmojiModel.logVisible
 
             ScrollView {
-                anchors.fill: parent
-                anchors.margins: 4
+                Layout.fillWidth: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 6
+                visible: syncController.logVisible
+                
+                background: Rectangle {
+                    color: PlasmaCore.Theme.backgroundColor
+                    border.color: PlasmaCore.Theme.textColor
+                    border.width: 1
+                    opacity: 0.3
+                    radius: Kirigami.Units.smallSpacing
+                }
 
                 TextArea {
                     id: syncLogArea
-                    text: syncEmojiModel.logText
+                    text: syncController.logText
                     readOnly: true
                     wrapMode: TextEdit.Wrap
                     font.family: "monospace"
-                    font.pixelSize: 10
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     selectByMouse: true
+                    color: PlasmaCore.Theme.textColor
                 }
             }
         }
     }
 
     // =========================================================================
-    // Logic Models & DataSources
+    // Data & Logic
     // =========================================================================
 
+    Plasma5Support.DataSource {
+        id: shellSource
+        engine: "executable"
+        connectedSources: []
+        
+        signal scriptFinished(string output, int exitCode)
+
+        onNewData: (source, data) => {
+            const stdout = data["stdout"] || ""
+            const stderr = data["stderr"] || "" // Sometimes useful
+            
+            // Check if this was a cleanup command (rm)
+            if (source.startsWith("rm ")) {
+                disconnectSource(source)
+                return
+            }
+
+            // If we are reading the log file
+            if (source.startsWith("cat ")) {
+                disconnectSource(source)
+                syncController.processLogOutput(stdout)
+                return
+            }
+            
+            // If this is the main execution (not usually captured here due to > redirection, 
+            // but kept for safety)
+            disconnectSource(source)
+        }
+    }
+
     QtObject {
-        id: syncEmojiModel
+        id: syncController
 
         property bool isSyncing: false
-        property bool networkError: false
-        property string statusText: i18n("Sync emoji database from Unicode")
-        property var activeDataSource: null
-        property string statusFile: ""
-        property bool logVisible: false
+        property string statusText: i18n("Sync Emoji Database")
         property string logText: ""
-        property int pollIntervalMs: 1000
-        property int lastLogSize: 0
+        property bool logVisible: false
+        property string tempLogPath: ""
 
         function addLog(message) {
-            var timestamp = new Date().toLocaleTimeString();
-            logText += "[" + timestamp + "] " + message + "\n";
-        }
-
-        function clearLog() {
-            logText = "";
+            const timestamp = new Date().toLocaleTimeString()
+            logText += `[${timestamp}] ${message}\n`
+            // Auto scroll to bottom
+            Qt.callLater(() => {
+                if(syncLogArea) syncLogArea.cursorPosition = syncLogArea.length
+            })
         }
 
         function startSync() {
             if (isSyncing) return
 
-                // Stop all timers first to ensure clean state
-                syncPollTimer.stop()
-                resetStatusTimer.stop()
+            isSyncing = true
+            statusText = i18n("Syncing...")
+            logVisible = true
+            logText = "" 
+            addLog("Sync started")
 
-                isSyncing = true
-                networkError = false
-                statusText = i18n("Syncing...")
-                logVisible = true
-                clearLog()
-                addLog("Starting emoji database sync...")
-                pollIntervalMs = 1000
-                lastLogSize = 0
+            // Generate unique temp file
+            tempLogPath = `/tmp/emoji_sync_${Date.now()}.log`
 
-                // Remove previous run's temp log file to avoid accumulation
-                if (statusFile && statusFile.length > 0) {
-                    var cleanupDS = Qt.createQmlObject(
-                        "import org.kde.plasma.plasma5support as Plasma5Support; Plasma5Support.DataSource { engine: 'executable'; connectedSources: [] }",
-                        syncEmojiModel
-                    );
-                    cleanupDS.connectSource('rm -f "' + statusFile + '"');
-                    Qt.callLater(function() {
-                        cleanupDS.destroy();
-                    });
-                    statusFile = "";
-                }
-
-                // Execute the update script using Qt's system call
-                executeUpdateScript()
-                // Start polling timer to check status
-                syncPollTimer.interval = pollIntervalMs
-                syncPollTimer.start()
+            // 1. Cleanup old logs if they exist (optional, but good hygiene)
+            // We just let the new one be created.
+            
+            // 2. Execute Script
+            executeScript()
+            
+            // 3. Start polling the log file
+            syncPollTimer.start()
         }
 
-        function executeUpdateScript() {
-            var scriptPath = Qt.resolvedUrl('../../service/update_emoji.sh')
-            var cleanScriptPath = scriptPath.toString().replace('file://', '').replace(/\/\//g, '/');
+        function executeScript() {
+            const scriptUrl = Qt.resolvedUrl('../../service/update_emoji.sh')
+            const cleanPath = scriptUrl.toString().replace('file://', '').replace(/\/\//g, '/')
+            
+            addLog(`Script: ${cleanPath}`)
+            addLog(`Log file: ${tempLogPath}`)
 
-            console.log('Executing sync script: ' + cleanScriptPath);
-            addLog('Executing sync script: ' + cleanScriptPath);
+            // Command: Run script, redirect all output to file, append exit code at the end
+            const cmd = `bash "${cleanPath}" > "${tempLogPath}" 2>&1; echo "EXIT:$?" >> "${tempLogPath}"`
+            
+            // We connect, but we don't expect data back immediately via this source 
+            // because of the redirection. We rely on the poll timer.
+            shellSource.connectSource(cmd)
+        }
 
-            var timestamp = Date.now();
-            statusFile = "/tmp/emoji_sync_" + timestamp + ".log";
-            addLog('Log file: ' + statusFile);
+        function checkStatus() {
+            if (!isSyncing || !tempLogPath) return
+            // Read the log file
+            shellSource.connectSource(`cat "${tempLogPath}" 2>/dev/null`)
+        }
 
-            // Run script and redirect output
-            var cmd = 'bash "' + cleanScriptPath + '" > "' + statusFile + '" 2>&1; echo "EXIT:$?" >> "' + statusFile + '"';
-            console.log('Command: ' + cmd);
-            addLog('Command: ' + cmd);
+        function processLogOutput(output) {
+            if (!output) return
 
-            try {
-                var executableDS = Qt.createQmlObject(`
-                import QtQuick
-                import org.kde.plasma.plasma5support as Plasma5Support
+            // Update display log
+            logText = output
 
-                Plasma5Support.DataSource {
-                    engine: 'executable'
-                    connectedSources: []
+            // Check completion states
+            const hasNetError = output.includes('SYNC_NET_ERROR')
+            const isDone = output.includes('Done.')
+            
+            // Parse exit code
+            let exitCode = -1
+            const exitMatch = output.match(/EXIT:(\d+)/)
+            
+            if (exitMatch) {
+                exitCode = parseInt(exitMatch[1])
+            }
 
-                    onNewData: function(sourceName, data) {
-                        console.log('Script execution initiated');
-                        syncEmojiModel.addLog('Script execution initiated');
-                        // Start polling immediately
-                        syncPollTimer.start();
-                        disconnectSource(sourceName);
-                        Qt.callLater(function() { destroy(); });
-                    }
-                }
-                `, syncEmojiButton);
-
-                executableDS.connectSource(cmd);
-                syncEmojiModel.activeDataSource = executableDS;
-                addLog('Command execution started');
-
-            } catch (error) {
-                console.error('Error starting sync: ' + error);
-                addLog('Error starting sync: ' + error);
-                onSyncError();
+            if (exitCode === 0 && isDone) {
+                finishSync(true, i18n("Sync Complete!"))
+            } else if (hasNetError) {
+                finishSync(false, i18n("Network error!"))
+            } else if (exitCode > 0) {
+                finishSync(false, i18n("Sync failed (Code %1)", exitCode))
             }
         }
 
-        function checkSyncStatus() {
-            if (!isSyncing || !statusFile) return;
-
-            var readCmd = 'cat "' + statusFile + '" 2>/dev/null';
-
-            var reader = Qt.createQmlObject(`
-            import QtQuick
-            import org.kde.plasma.plasma5support as Plasma5Support
-
-            Plasma5Support.DataSource {
-                engine: 'executable'
-                connectedSources: []
-
-                onNewData: function (sourceName, data) {
-                    var output = data['stdout'] || '';
-
-                    // Update log display with current file content
-                    if (output) {
-                        syncEmojiModel.logText = output;
-                    }
-
-                    // Adaptive polling interval: speed up when log grows, slow down when idle
-                    var sizeNow = output.length;
-                    if (sizeNow > syncEmojiModel.lastLogSize) {
-                        syncEmojiModel.pollIntervalMs = 1000; // active
-                    } else {
-                        syncEmojiModel.pollIntervalMs = 5000; // idle
-                    }
-                    syncEmojiModel.lastLogSize = sizeNow;
-                    syncPollTimer.interval = syncEmojiModel.pollIntervalMs;
-
-                    // Check if we have the exit code (means script finished)
-                    if (output && output.indexOf('EXIT:') !== -1) {
-                        var match = output.match(/EXIT:(\\d+)/);
-                        var exitCode = match ? parseInt(match[1]) : -1;
-
-                        // Also verify SYNC_COMPLETE is present
-                        var hasComplete = output.indexOf('SYNC_COMPLETE') !== -1;
-                        var hasNetError = output.indexOf('SYNC_NET_ERROR') !== -1;
-
-                        console.log('Sync finished - EXIT:' + exitCode + ', has SYNC_COMPLETE: ' + hasComplete);
-                        syncEmojiModel.addLog('Sync finished - EXIT:' + exitCode + ', has SYNC_COMPLETE: ' + hasComplete);
-
-                        syncPollTimer.stop();
-
-                        if (exitCode === 0 && hasComplete) {
-                            syncEmojiModel.onSyncComplete();
-                        } else if (hasNetError) {
-                            console.error('Network error during sync');
-                            syncEmojiModel.onSyncNetworkError();
-                        } else {
-                            console.error('Sync issue - exit code: ' + exitCode + ', complete marker: ' + hasComplete);
-                            syncEmojiModel.onSyncError();
-                        }
-                    } else {
-                        // Still in progress
-                        console.log('Sync in progress... (polling)');
-                    }
-
-                    disconnectSource(sourceName);
-                    Qt.callLater(function() { destroy(); });
-                }
+        function finishSync(success, message) {
+            syncPollTimer.stop()
+            isSyncing = false
+            statusText = message
+            addLog(success ? "Process finished successfully." : "Process failed.")
+            
+            // Cleanup temp file
+            if (tempLogPath) {
+                 shellSource.connectSource(`rm -f "${tempLogPath}"`)
             }
-            `, syncEmojiButton);
 
-            reader.connectSource(readCmd);
-        }
-
-        function onSyncComplete() {
-            isSyncing = false
-            statusText = i18n('Sync completed')
-            syncPollTimer.stop()
-            addLog('✓ Sync completed successfully')
-            resetStatusTimer.restart()
-        }
-
-        function onSyncError() {
-            isSyncing = false
-            statusText = i18n('Sync failed')
-            syncPollTimer.stop()
-            addLog('✗ Sync failed or timed out')
-            resetStatusTimer.restart()
-        }
-
-        function onSyncNetworkError() {
-            isSyncing = false
-            networkError = true
-            statusText = i18n('Network error')
-            syncPollTimer.stop()
-            addLog('✗ Network error: Unicode site unreachable')
+            // Reset button text after delay
             resetStatusTimer.restart()
         }
     }
@@ -423,24 +336,19 @@ Kirigami.ScrollablePage {
     // Timers
     // =========================================================================
 
-    // Poll timer to check sync status
     Timer {
         id: syncPollTimer
-        interval: syncEmojiModel ? syncEmojiModel.pollIntervalMs : 1000
-        running: false
+        interval: 1000
         repeat: true
-        onTriggered: syncEmojiModel.checkSyncStatus()
+        onTriggered: syncController.checkStatus()
     }
 
-    // Small timer to reset the button label after showing completion/error
     Timer {
         id: resetStatusTimer
-        interval: 2000
-        running: false
-        repeat: false
+        interval: 3000
         onTriggered: {
-            if (!syncEmojiModel.isSyncing) {
-                syncEmojiModel.statusText = i18n('Sync emoji database from Unicode')
+            if (!syncController.isSyncing) {
+                syncController.statusText = i18n("Sync Emoji Database")
             }
         }
     }

@@ -36,8 +36,8 @@ Item {
     // Search & Feedback
     property string hoveredEmoji: ""
     property string hoveredEmojiName: ""
-    property string defaultPastePlaceholder: "Paste emojis…"
-    property string searchPlaceholderText: "Search emojis…"
+    property string defaultPastePlaceholder: i18n("Paste emojis…")
+    property string searchPlaceholderText: i18n("Search emojis…")
     property bool searchPlaceholderMessageActive: false
 
     // Grid Configuration
@@ -87,22 +87,22 @@ Item {
 
     // Default Categories
     property var defaultCategoryOrder: [
-        { name: "All", icon: "view-list-icons" },
-        { name: "Favorites", icon: "bookmarks-bookmarked" },
-        { name: "Recent", icon: "chronometer" },
-        { name: "Smileys & Emotion", icon: "smiley" },
-        { name: "People & Body", icon: "im-user" },
-        { name: "Animals & Nature", icon: "animal" },
-        { name: "Food & Drink", icon: "food" },
-        { name: "Activities", icon: "games-highscores" },
-        { name: "Travel & Places", icon: "globe" },
-        { name: "Objects", icon: "object-group" },
-        { name: "Symbols", icon: "checkbox" },
-        { name: "Flags", icon: "flag" }
+        { name: "All", displayName: i18n("All"), icon: "view-list-icons" },
+        { name: "Favorites", displayName: i18n("Favorites"), icon: "bookmarks-bookmarked" },
+        { name: "Recent", displayName: i18n("Recent"), icon: "chronometer" },
+        { name: "Smileys & Emotion", displayName: i18n("Smileys & Emotion"), icon: "smiley" },
+        { name: "People & Body", displayName: i18n("People & Body"), icon: "im-user" },
+        { name: "Animals & Nature", displayName: i18n("Animals & Nature"), icon: "animal" },
+        { name: "Food & Drink", displayName: i18n("Food & Drink"), icon: "food" },
+        { name: "Activities", displayName: i18n("Activities"), icon: "games-highscores" },
+        { name: "Travel & Places", displayName: i18n("Travel & Places"), icon: "globe" },
+        { name: "Objects", displayName: i18n("Objects"), icon: "object-group" },
+        { name: "Symbols", displayName: i18n("Symbols"), icon: "checkbox" },
+        { name: "Flags", displayName: i18n("Flags"), icon: "flag" }
     ]
 
     // =========================================================================
-    // Data Logic (Merged from EmojiData)
+    // Data Logic
     // =========================================================================
 
     property var emojiList: []
@@ -559,7 +559,7 @@ Item {
             fullRoot.selectedEmojis = fullRoot.selectedEmojis.slice()
 
             if (fullRoot.selectedEmojis.length > 0) {
-                pasteField.placeholderText = "Selected " + fullRoot.selectedEmojis.length + " emoji(s)"
+                pasteField.placeholderText = i18n("Selected %1 emoji(s)", fullRoot.selectedEmojis.length)
             } else {
                 pasteField.placeholderText = fullRoot.defaultPastePlaceholder
             }
@@ -621,11 +621,11 @@ Item {
 
     function getSearchPlaceholder() {
         if (fullRoot.selectedCategory === "All") {
-            return "Search " + fullRoot.emojiList.length + " emojis..."
+            return i18n("Search %1 emojis...", fullRoot.emojiList.length)
         }
         const emojiCount = fullRoot.filteredEmojis.length
-        if (emojiCount === 0) return "Search emojis…"
-            return "Search " + emojiCount + " emojis…"
+        if (emojiCount === 0) return i18n("Search emojis…")
+            return i18n("Search %1 emojis…", emojiCount)
     }
 
     function resetSearchPlaceholder() {
@@ -647,9 +647,9 @@ Item {
 
     function showCopiedFeedback(emoji, name) {
         if (name && name.length > 0) {
-            showPasteTemporaryMessage("Copied: " + emoji + " (" + name + ")")
+            showPasteTemporaryMessage(i18n("Copied: %1 (%2)", emoji, name))
         } else {
-            showPasteTemporaryMessage("Copied: " + emoji)
+            showPasteTemporaryMessage(i18n("Copied: %1", emoji))
         }
     }
 
@@ -713,6 +713,16 @@ Item {
                             parsed[i].icon = "games-highscores"
                         }
                     }
+
+                    var defaultEntry = null
+                    for (var j = 0; j < defaultCategoryOrder.length; j++) {
+                        if (defaultCategoryOrder[j].name === parsed[i].name) {
+                            defaultEntry = defaultCategoryOrder[j]
+                            break
+                        }
+                    }
+                    parsed[i].displayName = defaultEntry ? defaultEntry.displayName : parsed[i].name
+
                     categoryModel.append(parsed[i])
                 }
                 saveCategoryOrder()
@@ -1205,7 +1215,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: plasmoid.configuration.AlwaysOpen ? "Unpin Window" : "Pin Window"
+                                    text: plasmoid.configuration.AlwaysOpen ? i18n("Unpin Window") : i18n("Pin Window")
                                     color: PlasmaCore.Theme.textColor
                                     font.bold: false
                                     anchors.verticalCenter: parent.verticalCenter
@@ -1213,7 +1223,7 @@ Item {
                             }
                         }
                         PlasmaComponents.ToolTip {
-                            text: fullRoot.sidebarExpanded ? "" : (plasmoid.configuration.AlwaysOpen ? "Unpin Window" : "Pin Window")
+                            text: fullRoot.sidebarExpanded ? "" : (plasmoid.configuration.AlwaysOpen ? i18n("Unpin Window") : i18n("Pin Window"))
                         }
                     }
 
@@ -1343,7 +1353,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: "Configure Settings"
+                                    text: i18n("Configure Settings")
                                     color: PlasmaCore.Theme.textColor
                                     font.bold: false
                                     anchors.verticalCenter: parent.verticalCenter
@@ -1351,7 +1361,7 @@ Item {
                             }
                         }
                         PlasmaComponents.ToolTip {
-                            text: fullRoot.sidebarExpanded ? "" : "Configure Emoji Selector Plus Settings..."
+                            text: fullRoot.sidebarExpanded ? "" : i18n("Configure Emoji Selector Plus Settings...")
                         }
                     }
 
@@ -1486,7 +1496,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: "Close Sidebar"
+                                    text: i18n("Close Sidebar")
                                     color: PlasmaCore.Theme.textColor
                                     font.bold: false
                                     anchors.verticalCenter: parent.verticalCenter
@@ -1494,7 +1504,7 @@ Item {
                             }
                         }
                         PlasmaComponents.ToolTip {
-                            text: fullRoot.sidebarExpanded ? "" : "Open Sidebar"
+                            text: fullRoot.sidebarExpanded ? "" : i18n("Open Sidebar")
                         }
                     }
 
@@ -1605,7 +1615,7 @@ Item {
                                             }
 
                                             Text {
-                                                text: model.name
+                                                text: model.displayName
                                                 color: categoryButton.isSelected ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
                                                 font.bold: false
                                                 anchors.verticalCenter: parent.verticalCenter
@@ -1615,7 +1625,7 @@ Item {
                                     }
 
                                     PlasmaComponents.ToolTip {
-                                        text: fullRoot.sidebarExpanded ? "" : model.name
+                                        text: fullRoot.sidebarExpanded ? "" : model.displayName
                                     }
 
                                     MouseArea {
@@ -2027,7 +2037,7 @@ Item {
 
                 PlasmaComponents.Label {
                     anchors.centerIn: parent
-                    text: "No results found :("
+                    text: i18n("No results found :(")
                     font.pixelSize: 16
                     color: PlasmaCore.Theme.textColor
                     opacity: 0.6
@@ -2081,7 +2091,7 @@ Item {
                 PlasmaComponents.Label {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    text: fullRoot.hoveredEmoji !== "" ? fullRoot.hoveredEmojiName : "Hover over an emoji for details... "
+                    text: fullRoot.hoveredEmoji !== "" ? fullRoot.hoveredEmojiName : i18n("Hover over an emoji for details...")
                     font.pixelSize: 14
                     font.bold: false
                     elide: Text.ElideRight
@@ -2102,7 +2112,7 @@ Item {
         property var emojiObj: null
 
         PlasmaComponents.MenuItem {
-            text: "Copy Emoji"
+            text: i18n("Copy Emoji")
             icon.name: "edit-copy"
             onClicked: {
                 clipboard.content = contextMenu.emoji
@@ -2111,31 +2121,31 @@ Item {
         }
 
         PlasmaComponents.MenuItem {
-            text: "Copy Name"
+            text: i18n("Copy Name")
             icon.name: "edit-copy"
             enabled: contextMenu.emojiObj && contextMenu.emojiObj.name && contextMenu.emojiObj.name.length > 0
             onClicked: {
                 if (contextMenu.emojiObj && contextMenu.emojiObj.name && contextMenu.emojiObj.name.length > 0) {
                     clipboard.content = contextMenu.emojiObj.name
-                    showPasteTemporaryMessage("Copied: " + contextMenu.emojiObj.name + " (" + contextMenu.emoji + ")")
+                    showPasteTemporaryMessage(i18n("Copied: %1 (%2)", contextMenu.emojiObj.name, contextMenu.emoji))
                 } else {
                     clipboard.content = contextMenu.emoji
-                    showPasteTemporaryMessage("Copied: " + contextMenu.emoji)
+                    showPasteTemporaryMessage(i18n("Copied: %1", contextMenu.emoji))
                 }
             }
         }
 
         PlasmaComponents.MenuItem {
-            text: isFavorite(contextMenu.emoji) ? "Unfavorite Emoji" : "Favorite Emoji"
+            text: isFavorite(contextMenu.emoji) ? i18n("Unfavorite Emoji") : i18n("Favorite Emoji")
             icon.name: isFavorite(contextMenu.emoji) ? "bookmarks" : "bookmarks-bookmarked"
             onClicked: {
                 var isFavoriteNow = toggleFavoriteEmoji(contextMenu.emojiObj)
                 var displayName = (contextMenu.emojiObj && contextMenu.emojiObj.name && contextMenu.emojiObj.name.length > 0) ? contextMenu.emojiObj.name : ""
                 var label = displayName && displayName.length > 0 ? displayName + " (" + contextMenu.emoji + ")" : contextMenu.emoji
                 if (isFavoriteNow) {
-                    showSearchTemporaryMessage("Favorited: " + label)
+                    showSearchTemporaryMessage(i18n("Favorited: %1", label))
                 } else {
-                    showSearchTemporaryMessage("Unfavorited: " + label)
+                    showSearchTemporaryMessage(i18n("Unfavorited: %1", label))
                 }
             }
         }
@@ -2144,11 +2154,11 @@ Item {
     PlasmaComponents.Menu {
         id: recentContextMenu
         PlasmaComponents.MenuItem {
-            text: "Clear Recent Emojis"
+            text: i18n("Clear Recent Emojis")
             icon.name: "edit-clear"
             onClicked: {
                 clearRecentEmojis()
-                showSearchTemporaryMessage("Cleared recent emojis")
+                showSearchTemporaryMessage(i18n("Cleared recent emojis"))
             }
         }
     }
@@ -2156,11 +2166,11 @@ Item {
     PlasmaComponents.Menu {
         id: favoritesContextMenu
         PlasmaComponents.MenuItem {
-            text: "Clear Favorite Emojis"
+            text: i18n("Clear Favorite Emojis")
             icon.name: "edit-clear"
             onClicked: {
                 clearFavoriteEmojis()
-                showSearchTemporaryMessage("Cleared favorite emojis")
+                showSearchTemporaryMessage(i18n("Cleared favorite emojis"))
             }
         }
     }
