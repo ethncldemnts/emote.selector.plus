@@ -179,7 +179,7 @@ Kirigami.ScrollablePage {
                 PlasmaComponents.Button {
                     id: syncButton
                     text: syncController.statusText
-                    enabled: !syncController.isSyncing
+                    enabled: !syncController.isSyncing && syncController.statusText === syncController.defaultStatusText
                     icon.name: syncController.isSyncing ? "view-refresh-symbolic" : "download"
                     
                     onClicked: syncController.startSync()
