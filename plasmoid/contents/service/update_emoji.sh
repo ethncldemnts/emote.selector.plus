@@ -9,8 +9,7 @@
 #
 # Requirements:
 #   - curl
-#   - jq
-#   - awk (POSIX compliant)
+#   - awk
 #   - date
 #
 # Usage:
@@ -30,12 +29,15 @@ ASSETS_DIR="$(cd "$SERVICE_DIR/../assets" && pwd)"
 RAW_FILE_PATH="$ASSETS_DIR/emoji-test.txt"
 JS_FILE_PATH="$ASSETS_DIR/emoji-list.js"
 
+# Ensure cleanup happens on exit
+trap 'rm -f "$RAW_FILE_PATH"' EXIT
+
 echo "SYNC_STARTED"
 
 # ==============================================================================
 # Dependency Checks
 # ==============================================================================
-for cmd in curl jq awk date; do
+for cmd in curl awk date; do
   if ! command -v "$cmd" >/dev/null; then
     echo "Error: $cmd is required." >&2
     exit 1
@@ -54,7 +56,6 @@ echo "Downloading $URL to $RAW_FILE_PATH ..."
 
 if ! curl --compressed -fsSL "$URL" -o "$RAW_FILE_PATH"; then
   echo "SYNC_NET_ERROR: failed to download $URL"
-  rm -f "$RAW_FILE_PATH" || true
   exit 2
 fi
 
@@ -87,100 +88,98 @@ HEADER="// Generated from: $URL\n// Generated on: $DATE_ISO\n// SHA256: $checksu
 # Write Header
 printf "%b" "$HEADER" > "$JS_FILE_PATH"
 
-# Parse with POSIX awk and pipe to jq for formatting
+# Parse with POSIX awk (direct JSON generation)
 awk \
-  '\
-  BEGIN {\
-    group = "";\
-    skip = 0;\
-    first_group = 1;\
-    print "{";\
-  }\
-\
-  # Handle Group Headers\
-  /^# group:/ {\
-    # Extract group name: "# group: Smileys & Emotion" -> "Smileys & Emotion"\
-    # index($0, ":") finds the colon. + 2 skips ": "\
-    g = substr($0, index($0, ":") + 2);\
-    \
-    if (g == "Component") {\
-      skip = 1;\
-      group = "";\
-    } else {\
-      if (!first_group) print "] ,"; else first_group = 0;\
-      group = g;\
-      skip = 0;\
-      printf "\"%s\": [", group;\
-      first = 1;\
-    }\
-    next;\
-  }\
-\
-  # Skip empty lines and comments that are not group headers\
-  /^$/ { next; }\
-  /^#/ { next; }\
-\
-  # Process Emoji Lines\
-  {\
-    if (skip || group == "") next;\
-\
-    if ($0 ~ /; fully-qualified/) {\
-      # Line format:\
-      # 1F600 ; fully-qualified     # 😀 E1.0 grinning face\
-      \
-      # Find the comment start #\
-      idx = index($0, "#");\
-      if (idx == 0) next;\
-\
-      # content after "# " is "😀 E1.0 grinning face"\
-      rest = substr($0, idx + 2);\
-\
-      # Find " E<version> "\
-      # Regex: space + E + digits/dots + space\
-      match(rest, / E[0-9.]+ /);\
-\
-      if (RSTART > 0) {\
-        # emoji is before the match\
-        emoji = substr(rest, 1, RSTART - 1);\
-        \
-        # name is after the match\
-        # RLENGTH is length of " E1.0 "\
-        name = substr(rest, RSTART + RLENGTH);\
-\
-        # Generate Alias\
-        alias = tolower(name);\
-        gsub(/ /, "_", alias);\
-        gsub(/-/, "_", alias);\
-        gsub(/:/, "", alias);\
-        gsub(/\./, "", alias);\
-        # Remove non-alphanumeric characters from start and end\
-        gsub(/^[^a-z0-9]+|[^a-z0-9]+$/, "", alias);\
-\
+  '
+  BEGIN {
+    group = "";
+    skip = 0;
+    first_group = 1;
+    printf "{";
+  }
+
+  # Handle Group Headers
+  /^# group:/ {
+    # Extract group name: "# group: Smileys & Emotion" -> "Smileys & Emotion"
+    # index($0, ":") finds the colon. + 2 skips ": "
+    g = substr($0, index($0, ":") + 2);
+    
+    if (g == "Component") {
+      skip = 1;
+      group = "";
+    } else {
+      if (!first_group) printf "],"; else first_group = 0;
+      group = g;
+      skip = 0;
+      printf "\"%s\":[", group;
+      first = 1;
+    }
+    next;
+  }
+
+  # Skip empty lines and comments that are not group headers
+  /^$/ { next; }
+  /^#/ { next; }
+
+  # Process Emoji Lines
+  {
+    if (skip || group == "") next;
+
+    if ($0 ~ /; fully-qualified/) {
+      # Line format:
+      # 1F600 ; fully-qualified     # 😀 E1.0 grinning face
+      
+      # Find the comment start #
+      idx = index($0, "#");
+      if (idx == 0) next;
+
+      # content after "# " is "😀 E1.0 grinning face"
+      rest = substr($0, idx + 2);
+
+      # Find " E<version> "
+      # Regex: space + E + digits/dots + space
+      match(rest, / E[0-9.]+ /);
+
+      if (RSTART > 0) {
+        # emoji is before the match
+        emoji = substr(rest, 1, RSTART - 1);
+        
+        # name is after the match
+        # RLENGTH is length of " E1.0 "
+        name = substr(rest, RSTART + RLENGTH);
+
+        # Generate Alias
+        alias = tolower(name);
+        gsub(/ /, "_", alias);
+        gsub(/-/, "_", alias);
+        gsub(/:/, "", alias);
+        gsub(/\./, "", alias);
+        # Remove non-alphanumeric characters from start and end
+        gsub(/^[^a-z0-9]+|[^a-z0-9]+$/, "", alias);
+
         # Escape for JSON (backslashes first, then quotes)
         # Note: In awk strings, we need 8 backslashes to get 2 in output (for JSON \\)
         gsub(/\\/, "\\\\\\\\", name);
         # And 3 backslashes to get \" in output (for JSON \")
-        gsub(/"/, "\\\"", name);\
-\
-        if (!first) printf ",";\
-        first = 0;\
-\
-        printf "\n  {\"emoji\": \"%s\", \"name\": \"%s\", \"aliases\": [\"%s\"]}", emoji, name, alias;\
-      }\
-    }\
-  }\
-\
-  END {\
-    if (group != "") print "]";\
-    print "\n}"\
+        gsub(/"/, "\\\"", name);
+
+        if (!first) printf ",";
+        first = 0;
+
+        printf "{\"emoji\":\"%s\",\"name\":\"%s\",\"aliases\":[\"%s\"]}", emoji, name, alias;
+      }
+    }
   }
-' "$RAW_FILE_PATH" | jq -c . >> "$JS_FILE_PATH"
+
+  END {
+    if (group != "") printf "]";
+    print "}"
+  }
+' "$RAW_FILE_PATH" >> "$JS_FILE_PATH"
 
 # ==============================================================================
 # Cleanup
 # ==============================================================================
-rm -f "$RAW_FILE_PATH" || true
 
-echo "Removed raw file."
 echo "Write complete."
 echo "SYNC_COMPLETE"
