@@ -205,29 +205,24 @@ Kirigami.ScrollablePage {
         id: shellSource
         engine: "executable"
         connectedSources: []
-        
-        signal scriptFinished(string output, int exitCode)
 
         onNewData: (source, data) => {
-            const stdout = data["stdout"] || ""
-            const stderr = data["stderr"] || "" // Sometimes useful
-            
-            // Check if this was a cleanup command (rm)
-            if (source.startsWith("rm ")) {
-                disconnectSource(source)
-                return
-            }
+            // Only handle the current sync command
+            if (source !== syncController.currentCommand) return
 
-            // If we are reading the log file
-            if (source.startsWith("cat ")) {
+            const stdout = data["stdout"]
+            const stderr = data["stderr"]
+            const exitCode = data["exit code"]
+
+            // Append Output
+            if (stdout) syncController.appendLog(stdout)
+            if (stderr) syncController.appendLog(stderr)
+
+            // Check for process termination
+            if (exitCode !== undefined) {
                 disconnectSource(source)
-                syncController.processLogOutput(stdout)
-                return
+                syncController.finishSync(exitCode)
             }
-            
-            // If this is the main execution (not usually captured here due to > redirection, 
-            // but kept for safety)
-            disconnectSource(source)
         }
     }
 
@@ -238,15 +233,19 @@ Kirigami.ScrollablePage {
         property string statusText: i18n("Sync Emoji Database")
         property string logText: ""
         property bool logVisible: false
-        property string tempLogPath: ""
+        property string currentCommand: ""
 
-        function addLog(message) {
-            const timestamp = new Date().toLocaleTimeString()
-            logText += `[${timestamp}] ${message}\n`
+        function appendLog(message) {
+            logText += message
             // Auto scroll to bottom
             Qt.callLater(() => {
                 if(syncLogArea) syncLogArea.cursorPosition = syncLogArea.length
             })
+        }
+
+        function addSystemLog(message) {
+            const timestamp = new Date().toLocaleTimeString()
+            appendLog(`[${timestamp}] ${message}\n`)
         }
 
         function startSync() {
@@ -256,79 +255,32 @@ Kirigami.ScrollablePage {
             statusText = i18n("Syncing...")
             logVisible = true
             logText = "" 
-            addLog("Sync started")
+            addSystemLog("Sync started...")
 
-            // Generate unique temp file
-            tempLogPath = `/tmp/emoji_sync_${Date.now()}.log`
-
-            // 1. Cleanup old logs if they exist (optional, but good hygiene)
-            // We just let the new one be created.
-            
-            // 2. Execute Script
             executeScript()
-            
-            // 3. Start polling the log file
-            syncPollTimer.start()
         }
 
         function executeScript() {
             const scriptUrl = Qt.resolvedUrl('../../service/update_emoji.sh')
-            const cleanPath = scriptUrl.toString().replace('file://', '').replace(/\/\//g, '/')
+            // Robust path handling: remove file:// scheme and decode URI components (e.g. %20 -> space)
+            const cleanPath = decodeURIComponent(scriptUrl.toString().replace(/^file:\/\//, ''))
             
-            addLog(`Script: ${cleanPath}`)
-            addLog(`Log file: ${tempLogPath}`)
+            addSystemLog(`Script: ${cleanPath}`)
 
-            // Command: Run script, redirect all output to file, append exit code at the end
-            const cmd = `bash "${cleanPath}" > "${tempLogPath}" 2>&1; echo "EXIT:$?" >> "${tempLogPath}"`
-            
-            // We connect, but we don't expect data back immediately via this source 
-            // because of the redirection. We rely on the poll timer.
-            shellSource.connectSource(cmd)
+            // Command: Run script directly
+            // We use bash explicitly
+            currentCommand = `bash "${cleanPath}"`
+            shellSource.connectSource(currentCommand)
         }
 
-        function checkStatus() {
-            if (!isSyncing || !tempLogPath) return
-            // Read the log file
-            shellSource.connectSource(`cat "${tempLogPath}" 2>/dev/null`)
-        }
-
-        function processLogOutput(output) {
-            if (!output) return
-
-            // Update display log
-            logText = output
-
-            // Check completion states
-            const hasNetError = output.includes('SYNC_NET_ERROR')
-            const isDone = output.includes('SYNC_COMPLETE')
-            
-            // Parse exit code
-            let exitCode = -1
-            const exitMatch = output.match(/EXIT:(\d+)/)
-            
-            if (exitMatch) {
-                exitCode = parseInt(exitMatch[1])
-            }
-
-            if (exitCode === 0 && isDone) {
-                finishSync(true, i18n("Sync Complete!"))
-            } else if (hasNetError) {
-                finishSync(false, i18n("Network error!"))
-            } else if (exitCode > 0) {
-                finishSync(false, i18n("Sync failed (Code %1)", exitCode))
-            }
-        }
-
-        function finishSync(success, message) {
-            syncPollTimer.stop()
+        function finishSync(exitCode) {
             isSyncing = false
-            statusText = message
-            addLog(success ? "Process finished successfully." : "Process failed.")
+            currentCommand = ""
             
-            // Cleanup temp file
-            if (tempLogPath) {
-                 shellSource.connectSource(`rm -f "${tempLogPath}"`)
-            }
+            const isSuccess = (exitCode === 0)
+            statusText = isSuccess ? i18n("Sync Complete!") : i18n("Sync failed (%1)", exitCode)
+            
+            addSystemLog(isSuccess ? "Process finished successfully." : `Process failed with code ${exitCode}.`)
 
             // Reset button text after delay
             resetStatusTimer.restart()
@@ -338,13 +290,6 @@ Kirigami.ScrollablePage {
     // =========================================================================
     // Timers
     // =========================================================================
-
-    Timer {
-        id: syncPollTimer
-        interval: 1000
-        repeat: true
-        onTriggered: syncController.checkStatus()
-    }
 
     Timer {
         id: resetStatusTimer
