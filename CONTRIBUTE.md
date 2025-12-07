@@ -1,33 +1,88 @@
-# Contributing to Emote Selector Plus
+# Contributing to kMoji
 
-We welcome contributions to Emote Selector Plus!
+Thank you for your interest in contributing to kMoji! This document provides guidelines for contributing to the project.
 
-## How to Contribute
+## Getting Started
 
-1.  **Fork the repository:** Start by forking the Emote Selector Plus repository to your GitHub account.
-2.  **Clone your fork:** Clone your forked repository to your local machine:
-    ```bash
-    git clone https://github.com/YOUR_USERNAME/emote.selector.plus.git
-    ```
-3.  **Create a new branch:** Create a new branch for your feature or bug fix:
-    ```bash
-    git checkout -b feature/your-feature-name
-    ```
-    or
-    ```bash
-    git checkout -b bugfix/your-bug-fix-name
-    ```
-4.  **Make your changes:** Implement your changes, ensuring they adhere to the existing code style and conventions.
-5.  **Test your changes:** If applicable, add or update tests to cover your changes. Ensure all existing tests pass.
-6.  **Commit your changes:** Write clear and concise commit messages.
-    ```bash
-    git commit -m "feat: Add new feature"
-    ```
-    or
-    ```bash
-    git commit -m "fix: Resolve bug in X"
-    ```
-7.  **Push to your fork:** Push your changes to your forked repository:
-    ```bash
-    git push origin feature/your-feature-name
-    
+1. Fork the repository on GitHub
+2. Clone your fork locally
+3. Create a new branch for your feature or bugfix
+4. Make your changes
+5. Test thoroughly
+6. Submit a pull request
+
+## Development Setup
+
+### Prerequisites
+
+- KDE Plasma 6 development packages
+- Qt 6.5+ development tools
+- `kpackagetool6` (usually part of plasma-framework or plasma-desktop packages)
+- `plasmawindowed` (optional, for testing in a window)
+
+### Testing
+
+You can test the plasmoid without installing it by running:
+
+```bash
+# Run in a standalone window
+cd plasmoid
+plasmawindowed org.kmoji.plasma
+```
+
+To install your changes locally for testing in the panel:
+
+```bash
+# Upgrade the existing installation
+kpackagetool6 --type Plasma/Applet --upgrade plasmoid
+```
+
+## Code Style
+
+### QML & JavaScript
+
+- Follow KDE QML coding style
+- Use consistent indentation (4 spaces)
+- Prefer declarative style over imperative
+- Keep components focused and reusable
+- JavaScript files (in `contents/assets`) should be clean and efficient
+
+## Directory Structure
+
+- `plasmoid/`: The main package source
+    - `contents/ui/`: QML user interface files
+    - `contents/assets/`: JavaScript data (emoji lists) and other assets
+    - `contents/config/`: Configuration definitions
+    - `metadata.json`: Package metadata
+- `scripts/`: Helper scripts for installation/uninstallation
+
+## Submitting Changes
+
+1. **Commit Messages**
+
+   - Use clear, descriptive commit messages
+   - Reference issue numbers when applicable
+   - Keep commits focused and atomic
+
+2. **Pull Requests**
+   - Describe what changes you've made
+   - Explain why the changes are necessary
+   - Include screenshots for UI changes (if applicable)
+
+## Reporting Issues
+
+- Use the GitHub issue tracker
+- Include system information (Plasma version, distro, etc.)
+- Provide steps to reproduce
+- If the widget crashes or fails to load, run `plasmawindowed org.kmoji.plasma` in a terminal and provide the output.
+
+## Code of Conduct
+
+- Be respectful and constructive
+- Welcome newcomers and help them get started
+- Focus on what is best for the community
+- Show empathy towards other community members
+
+## Questions?
+
+Feel free to open an issue for any questions about contributing.
