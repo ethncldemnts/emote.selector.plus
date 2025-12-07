@@ -1,20 +1,32 @@
 {
+  "KPackageStructure": "Plasma/Applet"
   "KPlugin": {
-    "Authors": [
-    { "Email": "eianleebusiness@gmail.com", "Name": "Eian \"Ethan\" Lee" }
-    ],
-    "Id": "emote.selector.plus",
-    "Name": "Emote Selector Plus",
-    "Description": "A panel-integrated emote picker",
-    "Icon": "preferences-desktop-emoticons-symbolic",
-    "Website": "https://www.youtube.com/watch?v=ebOtetPlOzc",
+		"Authors": [
+			{
+				"Name": "EianLee",
+				"Email": "eianleebusiness@gmail.com",
+				"Role": "Developer"
+			}
+		],
+    "Id": "org.kmoji.plasma",
     "Version": "1.0.0",
-    "License": "GPL-3.0-or-later",
+    "Name": "kMoji",
+    "Description": "A panel-integrated emote picker for KDE Plasma",
     "Category": "Utilities",
+    "Icon": "preferences-desktop-emoticons-symbolic",
+    "Website": "https://github.com/leeineian/kMoji",
+		"Support": "https://github.com/leeineian/kMoji/issues",
+		"Source": "https://github.com/leeineian/kMoji",
+    "License": "GPL-3.0-or-later",
     "EnabledByDefault": true
   },
+	"X-KDE-PluginInfo-Author": "EianLee",
+	"X-KDE-PluginInfo-Email": "eianleebusiness@gmail.com",
+	"X-KDE-PluginInfo-License": "GPL-3.0-or-later",
+	"X-KDE-PluginInfo-Name": "org.kmoji.plasma",
+	"X-KDE-PluginInfo-Version": "1.0.0",
+  "X-Plasma-API-Minimum-Version": "6.0",
+	"X-Plasma-MainScript": "ui/main.qml",
   "X-Plasma-NotificationArea": true,
-  "X-Plasma-NotificationAreaCategory": "SystemServices",
-  "KPackageStructure": "Plasma/Applet",
-  "X-Plasma-API-Minimum-Version": "6.0"
+  "X-Plasma-NotificationAreaCategory": "SystemServices"
 }
