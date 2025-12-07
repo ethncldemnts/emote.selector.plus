@@ -10,8 +10,7 @@
 # Requirements:
 #   - curl
 #   - jq
-#   - GNU awk
-#   - GNU sed
+#   - awk (POSIX compliant)
 #   - date
 #
 # Usage:
@@ -30,27 +29,18 @@ ASSETS_DIR="$(cd "$SERVICE_DIR/../assets" && pwd)"
 
 RAW_FILE_PATH="$ASSETS_DIR/emoji-test.txt"
 JS_FILE_PATH="$ASSETS_DIR/emoji-list.js"
-TMP_JSON="$ASSETS_DIR/emoji-list.json.tmp"
 
 echo "SYNC_STARTED"
 
 # ==============================================================================
 # Dependency Checks
 # ==============================================================================
-if ! command -v curl >/dev/null; then
-  echo "SYNC_NET_ERROR: curl not found"
-  exit 1
-fi
-
-if ! command -v jq >/dev/null; then
-  echo "Error: jq is required." >&2
-  exit 1
-fi
-
-if ! command -v awk >/dev/null; then
-  echo "Error: awk is required." >&2
-  exit 1
-fi
+for cmd in curl jq awk date; do
+  if ! command -v "$cmd" >/dev/null; then
+    echo "Error: $cmd is required." >&2
+    exit 1
+  fi
+done
 
 if [ ! -d "$ASSETS_DIR" ]; then
   echo "Error: assets directory does not exist: $ASSETS_DIR" >&2
@@ -65,7 +55,6 @@ echo "Downloading $URL to $RAW_FILE_PATH ..."
 if ! curl --compressed -fsSL "$URL" -o "$RAW_FILE_PATH"; then
   echo "SYNC_NET_ERROR: failed to download $URL"
   rm -f "$RAW_FILE_PATH" || true
-  echo "Partial file (if any) removed."
   exit 2
 fi
 
@@ -87,92 +76,111 @@ fi
 echo "SHA256 checksum: $checksum"
 
 # ==============================================================================
-# Parse and Generate JSON
+# Parse and Generate JS
 # ==============================================================================
-awk '
-  BEGIN {
-    group = "";
-    skip = 0;
-    first_group = 1;
-    print "{";
-  }
-
-  # Handle Group Headers
-  /^# group:/ {
-    g = substr($0, index($0, ":") + 2);
-    if (g == "Component") {
-      skip = 1;
-      group = "";
-    } else {
-      if (!first_group) print "] ,"; else first_group = 0;
-      group = g;
-      skip = 0;
-      printf "\"%s\": [", group;
-      first = 1;
-    }
-    next;
-  }
-
-  # Skip empty lines and comments
-  /^$/ { next; }
-  /^#/ { next; }
-
-  # Process Emoji Lines
-  {
-    if (skip || group == "") next;
-
-    if ($0 ~ /; fully-qualified/) {
-      split($0, a, ";");
-      code = a[1];
-      rest = a[2];
-
-      # Extract emoji char and name
-      match(rest, /# ([^ ]+) E[0-9.]+ (.*)/, m);
-      emoji = m[1];
-      name = m[2];
-
-      # Generate Alias
-      alias = tolower(name);
-      gsub(/ /, "_", alias);
-      gsub(/-/, "_", alias);
-      gsub(/:/, "", alias);
-      gsub(/\./, "", alias);
-      gsub(/^[^a-z0-9]+|[^a-z0-9]+$/, "", alias);
-
-      if (!first) printf ",";
-      first = 0;
-
-      printf "\n  {\"emoji\": \"%s\", \"name\": \"%s\", \"aliases\": [\"%s\"], \"tags\": []}", emoji, name, alias;
-    }
-  }
-
-  END {
-    if (group != "") print "]";
-    print "\n}"
-  }
-' "$RAW_FILE_PATH" > "$TMP_JSON"
-
-# ==============================================================================
-# Format and Finalize
-# ==============================================================================
-
-# Format JSON with jq
-jq . "$TMP_JSON" > "$TMP_JSON.pretty"
-mv "$TMP_JSON.pretty" "$TMP_JSON"
+echo "Parsing and generating JSON..."
 
 # Prepare JS Header
 DATE_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 HEADER="// Generated from: $URL\n// Generated on: $DATE_ISO\n// SHA256: $checksum\n\nconst emojiList = "
 
-# Write final JS file
+# Write Header
 printf "%b" "$HEADER" > "$JS_FILE_PATH"
-cat "$TMP_JSON" >> "$JS_FILE_PATH"
 
+# Parse with POSIX awk and pipe to jq for formatting
+awk \
+  '\
+  BEGIN {\
+    group = "";\
+    skip = 0;\
+    first_group = 1;\
+    print "{";\
+  }\
+\
+  # Handle Group Headers\
+  /^# group:/ {\
+    # Extract group name: "# group: Smileys & Emotion" -> "Smileys & Emotion"\
+    # index($0, ":") finds the colon. + 2 skips ": "\
+    g = substr($0, index($0, ":") + 2);\
+    \
+    if (g == "Component") {\
+      skip = 1;\
+      group = "";\
+    } else {\
+      if (!first_group) print "] ,"; else first_group = 0;\
+      group = g;\
+      skip = 0;\
+      printf "\"%s\": [", group;\
+      first = 1;\
+    }\
+    next;\
+  }\
+\
+  # Skip empty lines and comments that are not group headers\
+  /^$/ { next; }\
+  /^#/ { next; }\
+\
+  # Process Emoji Lines\
+  {\
+    if (skip || group == "") next;\
+\
+    if ($0 ~ /; fully-qualified/) {\
+      # Line format:\
+      # 1F600 ; fully-qualified     # 😀 E1.0 grinning face\
+      \
+      # Find the comment start #\
+      idx = index($0, "#");\
+      if (idx == 0) next;\
+\
+      # content after "# " is "😀 E1.0 grinning face"\
+      rest = substr($0, idx + 2);\
+\
+      # Find " E<version> "\
+      # Regex: space + E + digits/dots + space\
+      match(rest, / E[0-9.]+ /);\
+\
+      if (RSTART > 0) {\
+        # emoji is before the match\
+        emoji = substr(rest, 1, RSTART - 1);\
+        \
+        # name is after the match\
+        # RLENGTH is length of " E1.0 "\
+        name = substr(rest, RSTART + RLENGTH);\
+\
+        # Generate Alias\
+        alias = tolower(name);\
+        gsub(/ /, "_", alias);\
+        gsub(/-/, "_", alias);\
+        gsub(/:/, "", alias);\
+        gsub(/\./, "", alias);\
+        # Remove non-alphanumeric characters from start and end\
+        gsub(/^[^a-z0-9]+|[^a-z0-9]+$/, "", alias);\
+\
+        # Escape for JSON (backslashes first, then quotes)
+        # Note: In awk strings, we need 8 backslashes to get 2 in output (for JSON \\)
+        gsub(/\\/, "\\\\\\\\", name);
+        # And 3 backslashes to get \" in output (for JSON \")
+        gsub(/"/, "\\\"", name);\
+\
+        if (!first) printf ",";\
+        first = 0;\
+\
+        printf "\n  {\"emoji\": \"%s\", \"name\": \"%s\", \"aliases\": [\"%s\"], \"tags\": []}", emoji, name, alias;\
+      }\
+    }\
+  }\
+\
+  END {\
+    if (group != "") print "]";\
+    print "\n}"\
+  }
+' "$RAW_FILE_PATH" | jq . >> "$JS_FILE_PATH"
+
+# ==============================================================================
 # Cleanup
-rm "$TMP_JSON"
+# ==============================================================================
 rm -f "$RAW_FILE_PATH" || true
 
 echo "Removed raw file."
 echo "Write complete."
 echo "SYNC_COMPLETE"
-echo "Done."

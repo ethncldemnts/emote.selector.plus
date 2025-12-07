@@ -297,7 +297,7 @@ Kirigami.ScrollablePage {
 
             // Check completion states
             const hasNetError = output.includes('SYNC_NET_ERROR')
-            const isDone = output.includes('Done.')
+            const isDone = output.includes('SYNC_COMPLETE')
             
             // Parse exit code
             let exitCode = -1
