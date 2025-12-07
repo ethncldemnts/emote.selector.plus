@@ -139,14 +139,17 @@ Kirigami.ScrollablePage {
                     onPressed: mouse => mouse.accepted = false
                 }
             }
-        }
 
-        // --- Sync Section ---
+            // --- Sync Section ---
+            Kirigami.Separator {
+                Kirigami.FormData.label: i18n("Sync")
+                Kirigami.FormData.isSection: true
+            }
+        }
         
         // We use a simplified GroupBox-like look for the logs area
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.smallSpacing
 
             // Wrapper to center the button robustly
