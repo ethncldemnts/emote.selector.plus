@@ -11,7 +11,7 @@
     "Id": "org.kmoji.plasma",
     "Version": "1.0.0",
     "Name": "kMoji",
-    "Description": "A panel-integrated emote picker",
+    "Description": "An integrated emote selector",
     "Category": "Utilities",
     "Icon": "preferences-desktop-emoticons-symbolic",
     "Website": "https://github.com/leeineian/kMoji",
