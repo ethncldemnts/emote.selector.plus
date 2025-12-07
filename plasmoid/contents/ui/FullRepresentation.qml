@@ -1213,7 +1213,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: plasmoid.configuration.AlwaysOpen ? i18n("Unpin Window") : i18n("Pin Window")
+                                    text: plasmoid.configuration.AlwaysOpen ? i18n("Unpin Popup") : i18n("Pin Popup")
                                     color: PlasmaCore.Theme.textColor
                                     font.bold: false
                                     anchors.verticalCenter: parent.verticalCenter
@@ -1221,7 +1221,7 @@ Item {
                             }
                         }
                         PlasmaComponents.ToolTip {
-                            text: fullRoot.sidebarExpanded ? "" : (plasmoid.configuration.AlwaysOpen ? i18n("Unpin Window") : i18n("Pin Window"))
+                            text: fullRoot.sidebarExpanded ? "" : (plasmoid.configuration.AlwaysOpen ? i18n("Unpin Popup") : i18n("Pin Popup"))
                         }
                     }
 

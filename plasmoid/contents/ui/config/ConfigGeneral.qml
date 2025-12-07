@@ -22,6 +22,7 @@ Kirigami.ScrollablePage {
 
     property alias cfg_CloseAfterSelection: closeAfterSelection.checked
     property alias cfg_KeyboardNavigation: keyboardNavigation.checked
+    property alias cfg_AlwaysOpen: alwaysOpen.checked
 
     function emojiFontPixelSize(gridSize) {
         const size = gridSize || 0
@@ -133,6 +134,11 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
 
             PlasmaComponents.CheckBox {
+                id: alwaysOpen
+                text: i18n("Pin popup to screen when opened")
+            }
+
+            PlasmaComponents.CheckBox {
                 id: closeAfterSelection
                 text: i18n("Close popup after emoji selection")
             }
@@ -145,17 +151,12 @@ Kirigami.ScrollablePage {
                     text: i18n("Enable keyboard navigation")
                 }
 
-                PlasmaComponents.ToolButton {
+                Kirigami.ContextualHelpButton {
                     icon.name: "data-information"
-                    text: i18n("Help")
+                    toolTipText: i18n("← ↑ → ↓: Navigate UI elements\nENTER: Copy emoji\nSHIFT+ENTER: Copy emoji name\nCTRL+ENTER: Select emoji\nTAB: Focus next\nSHIFT+TAB: Focus previous\nESC: Close popup")
                     display: PlasmaComponents.ToolButton.IconOnly
-
-                    PlasmaComponents.ToolTip {
-                        text: i18n("← ↑ → ↓: Navigate UI elements\nENTER: Copy emoji\nSHIFT+ENTER: Copy emoji name\nCTRL+ENTER: Select emoji\nTAB: Focus next\nSHIFT+TAB: Focus previous\nESC: Close popup")
-                    }
-
-                    // Prevent click, acts as a tooltip anchor only
-                    onPressed: mouse => mouse.accepted = false
+                    leftPadding: 0
+                    rightPadding: 0
                 }
             }
         }
