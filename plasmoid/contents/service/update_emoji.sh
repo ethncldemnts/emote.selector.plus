@@ -174,7 +174,7 @@ awk \
     if (group != "") print "]";\
     print "\n}"\
   }
-' "$RAW_FILE_PATH" | jq . >> "$JS_FILE_PATH"
+' "$RAW_FILE_PATH" | jq -c . >> "$JS_FILE_PATH"
 
 # ==============================================================================
 # Cleanup
