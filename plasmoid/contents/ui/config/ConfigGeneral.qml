@@ -46,6 +46,25 @@ Kirigami.ScrollablePage {
         }
     }
 
+    component ConfigSection : ColumnLayout {
+        property alias text: label.text
+        spacing: 0
+        Layout.alignment: Qt.AlignHCenter
+        Layout.bottomMargin: Kirigami.Units.largeSpacing
+
+        PlasmaComponents.Label {
+            id: label
+            font.bold: true
+            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1
+            Layout.alignment: Qt.AlignHCenter
+        }
+        Kirigami.Separator {
+            Layout.preferredWidth: label.contentWidth
+            Layout.fillWidth: false
+            Layout.alignment: Qt.AlignHCenter
+        }
+    }
+
     Component.onCompleted: {
         rollSizeEmojiLabels()
     }
@@ -57,15 +76,13 @@ Kirigami.ScrollablePage {
     ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
 
-        Kirigami.FormLayout {
-            id: formLayout
-            Layout.fillWidth: true
+        // --- Display Section ---
+        ConfigSection {
+            text: i18n("Display")
+        }
 
-            // --- Display Section ---
-            Kirigami.Separator {
-                Kirigami.FormData.label: i18n("Display")
-                Kirigami.FormData.isSection: true
-            }
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
 
             RowLayout {
                 Layout.fillWidth: true
@@ -85,7 +102,7 @@ Kirigami.ScrollablePage {
                     snapMode: Slider.SnapAlways
 
                     readonly property var sizeValues: [36, 44, 56]
-                    
+
                     // Bind value to config, fallback to Medium (index 1)
                     value: {
                         const current = plasmoid.configuration.GridSize
@@ -104,12 +121,15 @@ Kirigami.ScrollablePage {
                     font.pixelSize: root.emojiFontPixelSize(gridSizeSlider.sizeValues[2])
                 }
             }
+        }
 
-            // --- Behavior Section ---
-            Kirigami.Separator {
-                Kirigami.FormData.label: i18n("Behavior")
-                Kirigami.FormData.isSection: true
-            }
+        // --- Behavior Section ---
+        ConfigSection {
+            text: i18n("Behavior")
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
 
             PlasmaComponents.CheckBox {
                 text: i18n("Close popup after emoji selection")
@@ -130,23 +150,22 @@ Kirigami.ScrollablePage {
                     icon.name: "help-hint-symbolic"
                     text: i18n("Help")
                     display: PlasmaComponents.ToolButton.IconOnly
-                    
+
                     PlasmaComponents.ToolTip {
                         text: i18n("← ↑ → ↓: Navigate UI elements\nENTER: Copy emoji\nSHIFT+ENTER: Copy emoji name\nCTRL+ENTER: Select emoji\nTAB: Focus next\nSHIFT+TAB: Focus previous\nESC: Close popup")
                     }
-                    
+
                     // Prevent click, acts as a tooltip anchor only
                     onPressed: mouse => mouse.accepted = false
                 }
             }
-
-            // --- Sync Section ---
-            Kirigami.Separator {
-                Kirigami.FormData.label: i18n("Sync")
-                Kirigami.FormData.isSection: true
-            }
         }
-        
+
+        // --- Sync Section ---
+        ConfigSection {
+            text: i18n("Sync")
+        }
+
         // We use a simplified GroupBox-like look for the logs area
         ColumnLayout {
             Layout.fillWidth: true
