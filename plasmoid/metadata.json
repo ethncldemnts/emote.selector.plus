@@ -17,8 +17,7 @@
     "Website": "https://github.com/leeineian/kMoji",
 		"Support": "https://github.com/leeineian/kMoji/issues",
 		"Source": "https://github.com/leeineian/kMoji",
-    "License": "GPL-3.0-or-later",
-    "EnabledByDefault": true
+    "License": "GPL-3.0-or-later"
   },
 	"X-KDE-PluginInfo-Author": "EianLee",
 	"X-KDE-PluginInfo-Email": "eianleebusiness@gmail.com",
