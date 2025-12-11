@@ -58,7 +58,7 @@ Item {
     property string emojiLastHoveredEmojiKey: ""
     property bool emojiKeyboardNavigationEnabled: plasmoid.configuration.KeyboardNavigation
     property Item emojiTabNextTarget: searchField
-    property Item emojiTabPreviousTarget: categoryRepeater.count > 0 ? (categoryRepeater.itemAt(categoryRepeater.count - 1) ? categoryRepeater.itemAt(categoryRepeater.count - 1) : sidebarToggleButton) : sidebarToggleButton
+    property Item emojiTabPreviousTarget: categoryListView.count > 0 ? (categoryListView.itemAtIndex(categoryListView.count - 1) ? categoryListView.itemAtIndex(categoryListView.count - 1) : sidebarToggleButton) : sidebarToggleButton
 
     // Height Calculation Properties
     property int categoryHeight: 32
@@ -81,7 +81,7 @@ Item {
         var sidebarButtons = (pinButton ? pinButton.implicitHeight : pinButtonHeight) +
         (settingsButtonInSidebar ? settingsButtonInSidebar.implicitHeight : settingsButtonHeight) +
         (sidebarToggleButton ? sidebarToggleButton.implicitHeight : toggleButtonHeight)
-        var categoriesBlock = categoryColumn ? categoryColumn.implicitHeight : fallbackCategories
+        var categoriesBlock = categoryListView ? categoryListView.contentHeight : fallbackCategories
 
         return topBlock + separatorHeight + sidebarButtons + categoriesBlock + separatorHeight + bottomBlock
     }
@@ -101,17 +101,39 @@ Item {
         { name: "Symbols", displayName: i18n("Symbols"), icon: "checkbox" },
         { name: "Flags", displayName: i18n("Flags"), icon: "flag" }
     ]
-
-    // =========================================================================
-    // Data Logic
-    // =========================================================================
-
+    
+    // Emoji List
     property var emojiList: []
     property string filter: ""
     property var filteredEmojis: []
     property string selectedCategory: "All"
     property var recentEmojis: []
     property var favoriteEmojis: []
+    
+    // Loading State
+    property bool isLoading: false
+    property int loadingProgress: 0
+    property int totalEmojisToLoad: 0
+    property var pendingEmojis: []
+    property int chunkSize: 100
+    
+    // Temporary storage for the loading process
+    property var loadingBuffer: []
+
+    // Grid State
+    property bool gridIsMouseOver: false
+
+    // Grid Keyboard State
+    property bool gridKeyboardActionPressed: false
+    property bool gridExternalKeyboardActionPressed: false
+
+    // Button State
+    property bool pinButtonKeyboardPressed: false
+    property bool settingsButtonKeyboardPressed: false
+    property bool sidebarButtonKeyboardPressed: false
+
+    // Category Drag State
+    property int draggedCategoryIndex: -1
 
     Settings {
         id: settings
@@ -120,39 +142,84 @@ Item {
         property string favoriteEmojisJson: "[]"
     }
 
+    Timer {
+        id: loadTimer
+        interval: 10
+        repeat: true
+        onTriggered: processNextChunk()
+    }
+
+    function processNextChunk() {
+        const limit = Math.min(loadingProgress + chunkSize, totalEmojisToLoad)
+        const entries = emojiList
+        let currentEntries = []
+        let processedCount = 0
+        const sourceData = pendingEmojis
+        
+        while (loadingProgress < totalEmojisToLoad && processedCount < chunkSize) {
+            const item = sourceData[loadingProgress]
+            const itemName = item.name || ""
+            const itemAliases = item.aliases || []
+            const itemTags = item.tags || []
+            const itemGroup = item.group
+
+            let searchStr = (item.emoji + " " + itemName + " " + (item.slug || "") + " " + itemGroup).toLowerCase()
+            if (itemAliases.length > 0) searchStr += " " + itemAliases.join(" ").toLowerCase()
+            if (itemTags.length > 0) searchStr += " " + itemTags.join(" ").toLowerCase()
+
+            loadingBuffer.push({
+                emoji: item.emoji,
+                name: itemName,
+                slug: itemName ? itemName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : "",
+                group: itemGroup,
+                aliases: itemAliases,
+                tags: itemTags,
+                searchString: searchStr,
+                emoji_version: "",
+                unicode_version: ""
+            })
+
+            loadingProgress++
+            processedCount++
+        }
+
+        if (loadingProgress >= totalEmojisToLoad) {
+            loadTimer.stop()
+            emojiList = loadingBuffer
+            isLoading = false
+            loadingBuffer = []
+            pendingEmojis = []
+            console.log("Successfully loaded", emojiList.length, "emojis asynchronously")
+            updateFilteredEmojis()
+        }
+    }
+
     function loadEmojis() {
         try {
             const rawData = EmojiList.emojiList
-            const entries = []
+            const flatList = []
 
+            isLoading = true
+            loadingProgress = 0
+            loadingBuffer = []
             for (const category in rawData) {
                 if (!Object.prototype.hasOwnProperty.call(rawData, category)) continue
-                    const emojiArray = rawData[category] || []
-                    const arrayLength = emojiArray.length
-
-                    for (let i = 0; i < arrayLength; i++) {
-                        const item = emojiArray[i]
-                        const itemName = item.name || ""
-                        const itemAliases = item.aliases || []
-                        const itemTags = item.tags || []
-
-                        entries.push({
-                            emoji: item.emoji,
-                            name: itemName,
-                            slug: itemName ? itemName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : "",
-                                     group: category,
-                                     aliases: itemAliases,
-                                     tags: itemTags,
-                                     emoji_version: "",
-                                     unicode_version: ""
-                        })
-                    }
+                const emojiArray = rawData[category] || []
+                for (let i = 0; i < emojiArray.length; i++) {
+                    emojiArray[i].group = category
+                    flatList.push(emojiArray[i])
+                }
             }
-            emojiList = entries
-            console.log("Successfully loaded", entries.length, "emojis from Unicode data (including all variants)")
-            updateFilteredEmojis()
+
+            pendingEmojis = flatList
+            totalEmojisToLoad = flatList.length
+            
+            
+            loadTimer.restart()
+
         } catch (e) {
-            console.log("Error loading emojis:", e)
+            console.log("Error starting emoji load:", e)
+            isLoading = false
         }
     }
 
@@ -160,8 +227,8 @@ Item {
         try {
             if (settings.recentEmojisJson && settings.recentEmojisJson !== "[]") {
                 recentEmojis = JSON.parse(settings.recentEmojisJson)
-                if (recentEmojis.length > 50) {
-                    recentEmojis = recentEmojis.slice(0, 50)
+                if (recentEmojis.length > 100) {
+                    recentEmojis = recentEmojis.slice(0, 100)
                     try {
                         settings.recentEmojisJson = JSON.stringify(recentEmojis)
                     } catch (e) {
@@ -202,8 +269,8 @@ Item {
 
         newRecentEmojis.unshift(emoji)
 
-        if (newRecentEmojis.length > 50) {
-            newRecentEmojis = newRecentEmojis.slice(0, 50)
+        if (newRecentEmojis.length > 100) {
+            newRecentEmojis = newRecentEmojis.slice(0, 100)
         }
 
         recentEmojis = newRecentEmojis
@@ -216,19 +283,19 @@ Item {
 
     function toggleFavoriteEmoji(emoji) {
         if (!emoji) return false
-            let isFavoriteNow = false
-            const index = favoriteEmojis.findIndex(e => e.emoji === emoji.emoji)
-            if (index >= 0) {
-                favoriteEmojis.splice(index, 1)
-                isFavoriteNow = false
-            } else {
-                favoriteEmojis.push(emoji)
-                isFavoriteNow = true
-            }
-            favoriteEmojis = favoriteEmojis.slice()
-            saveFavoriteEmojis()
-            updateFilteredEmojis()
-            return isFavoriteNow
+        let isFavoriteNow = false
+        const index = favoriteEmojis.findIndex(e => e.emoji === emoji.emoji)
+        if (index >= 0) {
+            favoriteEmojis.splice(index, 1)
+            isFavoriteNow = false
+        } else {
+            favoriteEmojis.push(emoji)
+            isFavoriteNow = true
+        }
+        favoriteEmojis = favoriteEmojis.slice()
+        saveFavoriteEmojis()
+        updateFilteredEmojis()
+        return isFavoriteNow
     }
 
     function isFavorite(emoji) {
@@ -274,56 +341,17 @@ Item {
             return list
         }
 
-        const lowerFilter = searchText.toLowerCase()
-        let searchRegex = null
-        try {
-            searchRegex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
-        } catch (e) {
-            searchRegex = null
-        }
-
+        const lowerFilter = searchText.toLowerCase().trim()
+        const searchTokens = lowerFilter.split(/\s+/)
+        
         return list.filter(e => {
-            if (e.emoji && searchRegex && searchRegex.test(e.emoji)) return true
-                if (e.emoji && e.emoji.indexOf(searchText) !== -1) return true
-
-                    if (e.name) {
-                        if (searchRegex && searchRegex.test(e.name)) return true
-                            if (e.name.toLowerCase().indexOf(lowerFilter) !== -1) return true
-                    }
-
-                    if (e.slug) {
-                        if (searchRegex && searchRegex.test(e.slug)) return true
-                            if (e.slug.toLowerCase().indexOf(lowerFilter) !== -1) return true
-                    }
-
-                    if (e.group) {
-                        if (searchRegex && searchRegex.test(e.group)) return true
-                            if (e.group.toLowerCase().indexOf(lowerFilter) !== -1) return true
-                    }
-
-                    if (e.aliases && e.aliases.length > 0) {
-                        const aliasLen = e.aliases.length
-                        for (let i = 0; i < aliasLen; i++) {
-                            if (e.aliases[i] &&
-                                (searchRegex && searchRegex.test(e.aliases[i]) ||
-                                e.aliases[i].toLowerCase().indexOf(lowerFilter) !== -1)) {
-                                return true
-                                }
-                        }
-                    }
-
-                    if (e.tags && e.tags.length > 0) {
-                        const tagLen = e.tags.length
-                        for (let i = 0; i < tagLen; i++) {
-                            if (e.tags[i] &&
-                                (searchRegex && searchRegex.test(e.tags[i]) ||
-                                e.tags[i].toLowerCase().indexOf(lowerFilter) !== -1)) {
-                                return true
-                                }
-                        }
-                    }
-
+            if (!e.searchString) return false
+            for (let i = 0; i < searchTokens.length; i++) {
+                if (e.searchString.indexOf(searchTokens[i]) === -1) {
                     return false
+                }
+            }
+            return true
         })
     }
 
@@ -393,132 +421,166 @@ Item {
 
     function emojiModelLength() {
         if (!fullRoot.emojiViewModel) return 0
-            if (fullRoot.emojiViewModel.length !== undefined) return fullRoot.emojiViewModel.length
-                if (fullRoot.emojiViewModel.count !== undefined) return fullRoot.emojiViewModel.count
-                    return 0
+        if (fullRoot.emojiViewModel.length !== undefined) return fullRoot.emojiViewModel.length
+        if (fullRoot.emojiViewModel.count !== undefined) return fullRoot.emojiViewModel.count
+        return 0
     }
 
     function emojiModelItemAt(index) {
         if (!fullRoot.emojiViewModel || index < 0) return null
-            if (fullRoot.emojiViewModel.length !== undefined) {
-                if (index >= fullRoot.emojiViewModel.length) return null
-                    return fullRoot.emojiViewModel[index]
-            }
-            if (typeof fullRoot.emojiViewModel.get === "function") {
-                return fullRoot.emojiViewModel.get(index)
-            }
-            return null
+        if (fullRoot.emojiViewModel.length !== undefined) {
+            if (index >= fullRoot.emojiViewModel.length) return null
+            return fullRoot.emojiViewModel[index]
+        }
+        if (typeof fullRoot.emojiViewModel.get === "function") {
+            return fullRoot.emojiViewModel.get(index)
+        }
+        return null
     }
 
     function emojiIndexForEmojiKey(key) {
         if (!key || key.length === 0) return -1
-            const length = emojiModelLength()
-            for (let i = 0; i < length; i++) {
-                const item = emojiModelItemAt(i)
-                if (item && item.emoji === key) return i
-            }
-            return -1
+        const length = emojiModelLength()
+        for (let i = 0; i < length; i++) {
+            const item = emojiModelItemAt(i)
+            if (item && item.emoji === key) return i
+        }
+        return -1
     }
 
     function emojiEnsureKeyboardAnchorIndex() {
         if (!emojiGridView || emojiGridView.count === 0) return -1
-            if (emojiGridView.currentIndex >= 0 && emojiGridView.currentIndex < emojiGridView.count) {
-                return emojiGridView.currentIndex
-            }
+        if (emojiGridView.currentIndex >= 0 && emojiGridView.currentIndex < emojiGridView.count) {
+            return emojiGridView.currentIndex
+        }
 
-            const keyCandidates = [fullRoot.emojiHoveredEmojiKey, fullRoot.emojiHoveredEmojiKey]
-            for (let i = 0; i < keyCandidates.length; i++) {
-                const candidate = keyCandidates[i]
-                const candidateIndex = emojiIndexForEmojiKey(candidate)
-                if (candidateIndex >= 0) {
-                    emojiGridView.currentIndex = candidateIndex
-                    emojiGridView.updateKeyboardHover()
-                    return candidateIndex
-                }
+        const keyCandidates = [fullRoot.emojiHoveredEmojiKey, fullRoot.emojiHoveredEmojiKey]
+        for (let i = 0; i < keyCandidates.length; i++) {
+            const candidate = keyCandidates[i]
+            const candidateIndex = emojiIndexForEmojiKey(candidate)
+            if (candidateIndex >= 0) {
+                emojiGridView.currentIndex = candidateIndex
+                emojiGridView.updateKeyboardHover()
+                return candidateIndex
             }
+        }
 
-            emojiGridView.currentIndex = 0
-            emojiGridView.updateKeyboardHover()
-            return 0
+        emojiGridView.currentIndex = 0
+        emojiGridView.updateKeyboardHover()
+        return 0
     }
 
     function emojiEstimateNavigationColumns() {
         if (!emojiGridView) return 1
-            const cellWidth = emojiGridView.cellWidth > 0 ? emojiGridView.cellWidth : fullRoot.internalGridSize
-            if (cellWidth <= 0) return 1
-                const availableWidth = emojiGridView.width > 0 ? emojiGridView.width : emojiArea.width
-                const columns = Math.floor(availableWidth / cellWidth)
-                return Math.max(1, columns)
+        const cellWidth = emojiGridView.cellWidth > 0 ? emojiGridView.cellWidth : fullRoot.internalGridSize
+        if (cellWidth <= 0) return 1
+        const availableWidth = emojiGridView.width > 0 ? emojiGridView.width : emojiArea.width
+        const columns = Math.floor(availableWidth / cellWidth)
+        return Math.max(1, columns)
+    }
+
+    function isEmojiSelected(emoji) {
+        return fullRoot.selectedEmojis.indexOf(emoji) >= 0
+    }
+
+    function isEmojiKeyboardFocused(isCurrent, isActive) {
+        return isCurrent && isActive
+    }
+
+    function isEmojiKeyboardPressed(isCurrent) {
+        return isCurrent && (fullRoot.gridKeyboardActionPressed || fullRoot.gridExternalKeyboardActionPressed)
+    }
+
+    function isEmojiHovered(emoji, gridMouseOver) {
+        // Global hover check
+        return fullRoot.emojiHoveredEmojiKey === emoji
+    }
+    
+    function isEmojiLastHovered(emoji, gridMouseOver) {
+        return fullRoot.emojiLastHoveredEmojiKey === emoji && !gridMouseOver
+    }
+
+    function isCategorySelected(name) {
+        return fullRoot.selectedCategory === name
+    }
+
+    function isCategoryDragging(index) {
+        return fullRoot.draggedCategoryIndex === index
+    }
+    
+    function shouldShowEmojiScrollBar() {
+        if (!emojiGridView) return false
+        return emojiGridView.contentHeight > emojiGridView.height + 1
     }
 
     function emojiManualMoveCurrentIndex(key) {
         if (!emojiGridView || emojiGridView.count === 0) return false
 
-            let index = emojiGridView.currentIndex
-            if (index < 0) index = 0
+        let index = emojiGridView.currentIndex
+        if (index < 0) index = 0
 
-                const count = emojiGridView.count
-                const columns = emojiEstimateNavigationColumns()
-                let newIndex = index
+        const count = emojiGridView.count
+        const columns = emojiEstimateNavigationColumns()
+        let newIndex = index
 
-                switch (key) {
-                    case Qt.Key_Left:
-                        if (index > 0) newIndex = index - 1
-                            else if (emojiGridView.keyNavigationWraps && count > 0) newIndex = count - 1
-                                break
-                    case Qt.Key_Right:
-                        if (index + 1 < count) newIndex = index + 1
-                            else if (emojiGridView.keyNavigationWraps && count > 0) newIndex = 0
-                                break
-                    case Qt.Key_Up:
-                        const candidateUp = index - columns
-                        if (candidateUp >= 0) {
-                            newIndex = candidateUp
-                        } else if (emojiGridView.keyNavigationWraps && count > 0) {
-                            const remainder = index % columns
-                            let wrapped = Math.floor((count - 1) / columns) * columns + remainder
-                            if (wrapped >= count) wrapped = count - 1
-                                newIndex = wrapped
-                        }
-                        break
-                    case Qt.Key_Down:
-                        const candidateDown = index + columns
-                        if (candidateDown < count) {
-                            newIndex = candidateDown
-                        } else if (emojiGridView.keyNavigationWraps && count > 0) {
-                            let wrapped = index % columns
-                            if (wrapped >= count) wrapped = count - 1
-                                newIndex = wrapped
-                        }
-                        break
-                    default:
-                        break
+        switch (key) {
+            case Qt.Key_Left:
+                if (index > 0) newIndex = index - 1
+                else if (emojiGridView.keyNavigationWraps && count > 0) newIndex = count - 1
+                break
+            case Qt.Key_Right:
+                if (index + 1 < count) newIndex = index + 1
+                else if (emojiGridView.keyNavigationWraps && count > 0) newIndex = 0
+                break
+            case Qt.Key_Up:
+                const candidateUp = index - columns
+                if (candidateUp >= 0) {
+                    newIndex = candidateUp
+                } else if (emojiGridView.keyNavigationWraps && count > 0) {
+                    const remainder = index % columns
+                    let wrapped = Math.floor((count - 1) / columns) * columns + remainder
+                    if (wrapped >= count) wrapped = count - 1
+                    newIndex = wrapped
                 }
-
-                if (newIndex !== index) {
-                    emojiGridView.currentIndex = newIndex
-                    return true
+                break
+            case Qt.Key_Down:
+                const candidateDown = index + columns
+                if (candidateDown < count) {
+                    newIndex = candidateDown
+                } else if (emojiGridView.keyNavigationWraps && count > 0) {
+                    let wrapped = index % columns
+                    if (wrapped >= count) wrapped = count - 1
+                    newIndex = wrapped
                 }
-                return false
+                break
+            default:
+                break
+        }
+
+        if (newIndex !== index) {
+            emojiGridView.currentIndex = newIndex
+            return true
+        }
+        return false
     }
 
     function emojiHandleExternalArrowKey(key) {
         if (!fullRoot.emojiKeyboardNavigationEnabled) return false
-            if (!emojiGridView || emojiGridView.count === 0) return false
-                if (key !== Qt.Key_Left && key !== Qt.Key_Right && key !== Qt.Key_Up && key !== Qt.Key_Down) return false
+        if (!emojiGridView || emojiGridView.count === 0) return false
+        if (key !== Qt.Key_Left && key !== Qt.Key_Right && key !== Qt.Key_Up && key !== Qt.Key_Down) return false
 
-                    emojiEnsureKeyboardAnchorIndex()
-                    const previousIndex = emojiGridView.currentIndex
-                    emojiManualMoveCurrentIndex(key)
+        emojiEnsureKeyboardAnchorIndex()
+        const previousIndex = emojiGridView.currentIndex
+        emojiManualMoveCurrentIndex(key)
 
-                    if (emojiGridView.currentIndex !== previousIndex) {
-                        if (typeof emojiGridView.positionViewAtIndex === "function") {
-                            emojiGridView.positionViewAtIndex(emojiGridView.currentIndex, GridView.Contain)
-                        }
-                        emojiGridView.updateKeyboardHover()
-                        return true
-                    }
-                    return false
+        if (emojiGridView.currentIndex !== previousIndex) {
+            if (typeof emojiGridView.positionViewAtIndex === "function") {
+                emojiGridView.positionViewAtIndex(emojiGridView.currentIndex, GridView.Contain)
+            }
+            emojiGridView.updateKeyboardHover()
+            return true
+        }
+        return false
     }
 
     function getCurrentFocusedEmoji() {
@@ -614,7 +676,7 @@ Item {
         for (var i = 0; i < categoryModel.count; i++) {
             order.push({
                 name: categoryModel.get(i).name,
-                       icon: categoryModel.get(i).icon
+                icon: categoryModel.get(i).icon
             })
         }
         plasmoid.configuration.CategoryOrder = JSON.stringify(order)
@@ -626,7 +688,7 @@ Item {
         }
         const emojiCount = fullRoot.filteredEmojis.length
         if (emojiCount === 0) return i18n("Search emojis…")
-            return i18n("Search %1 emojis…", emojiCount)
+        return i18n("Search %1 emojis…", emojiCount)
     }
 
     function resetSearchPlaceholder() {
@@ -656,17 +718,17 @@ Item {
 
     function handleEmojiNavigationFromTextInput(event) {
         if (!plasmoid.configuration.KeyboardNavigation) return false
-            if (!event) return false
+        if (!event) return false
 
-                if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right &&
-                    event.key !== Qt.Key_Up && event.key !== Qt.Key_Down) {
-                    return false
-                    }
+        if (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right &&
+            event.key !== Qt.Key_Up && event.key !== Qt.Key_Down) {
+            return false
+        }
 
-                    if (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) return false
-                        if (!emojiGridView || typeof emojiHandleExternalArrowKey !== "function") return false
+        if (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) return false
+        if (!emojiGridView || typeof emojiHandleExternalArrowKey !== "function") return false
 
-                            return emojiHandleExternalArrowKey(event.key)
+        return emojiHandleExternalArrowKey(event.key)
     }
 
     function openConfigurationDialog() {
@@ -679,11 +741,11 @@ Item {
         }
         if (!configureAction) return
 
-            if (typeof configureAction.trigger === "function") {
-                configureAction.trigger()
-            } else if (typeof configureAction.triggered === "function") {
-                configureAction.triggered()
-            }
+        if (typeof configureAction.trigger === "function") {
+            configureAction.trigger()
+        } else if (typeof configureAction.triggered === "function") {
+            configureAction.triggered()
+        }
     }
 
     // =========================================================================
@@ -801,15 +863,6 @@ Item {
     }
 
     Timer {
-        id: searchDebounceTimer
-        interval: 200 // 200ms debounce
-        repeat: false
-        onTriggered: {
-            fullRoot.filter = searchField.text
-        }
-    }
-
-    Timer {
         id: pastePlaceholderResetTimer
         interval: 2000
         running: false
@@ -872,7 +925,7 @@ Item {
                         KeyNavigation.backtab: plasmoid.configuration.KeyboardNavigation ? emojiGridView : null
 
                         onTextChanged: {
-                            searchDebounceTimer.restart()
+                            fullRoot.filter = text
                         }
 
                         onActiveFocusChanged: {
@@ -1105,14 +1158,14 @@ Item {
                         KeyNavigation.down: plasmoid.configuration.KeyboardNavigation ? settingsButtonInSidebar : null
                         KeyNavigation.right: plasmoid.configuration.KeyboardNavigation ? emojiGridView : null
 
-                        property bool keyboardPressed: false
+
 
                         Timer {
                             id: pinKeyboardFeedbackReset
                             interval: 120
                             repeat: false
                             running: false
-                            onTriggered: pinButton.keyboardPressed = false
+                            onTriggered: fullRoot.pinButtonKeyboardPressed = false
                         }
 
                         onClicked: {
@@ -1125,7 +1178,7 @@ Item {
                         Keys.onPressed: function(event) {
                             if (!plasmoid.configuration.KeyboardNavigation) return
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    keyboardPressed = true
+                                    fullRoot.pinButtonKeyboardPressed = true
                                     pinKeyboardFeedbackReset.restart()
                                     plasmoid.configuration.AlwaysOpen = !plasmoid.configuration.AlwaysOpen
                                     event.accepted = true
@@ -1138,7 +1191,7 @@ Item {
 
                         Keys.onReleased: function(event) {
                             if (plasmoid.configuration.KeyboardNavigation && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
-                                keyboardPressed = false
+                                fullRoot.pinButtonKeyboardPressed = false
                                 pinKeyboardFeedbackReset.stop()
                                 event.accepted = true
                             }
@@ -1175,7 +1228,7 @@ Item {
                                 anchors.fill: parent
                                 color: PlasmaCore.Theme.highlightColor
                                 radius: 4
-                                opacity: (pinArea.pressed || pinButton.keyboardPressed) ? 1.0 : (((pinArea.containsMouse) || pinButton.activeFocus) ? 0.2 : 0)
+                                opacity: (pinArea.pressed || fullRoot.pinButtonKeyboardPressed) ? 1.0 : (((pinArea.containsMouse) || pinButton.activeFocus) ? 0.2 : 0)
                             }
                             Rectangle {
                                 anchors.fill: parent
@@ -1240,14 +1293,12 @@ Item {
                         KeyNavigation.up: plasmoid.configuration.KeyboardNavigation ? pinButton : null
                         KeyNavigation.right: plasmoid.configuration.KeyboardNavigation ? emojiGridView : null
 
-                        property bool keyboardPressed: false
-
                         Timer {
                             id: settingsKeyboardFeedbackReset
                             interval: 120
                             repeat: false
                             running: false
-                            onTriggered: settingsButtonInSidebar.keyboardPressed = false
+                            onTriggered: fullRoot.settingsButtonKeyboardPressed = false
                         }
 
                         Timer {
@@ -1263,7 +1314,7 @@ Item {
                         Keys.onPressed: function(event) {
                             if (!plasmoid.configuration.KeyboardNavigation) return
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    keyboardPressed = true
+                                    fullRoot.settingsButtonKeyboardPressed = true
                                     settingsKeyboardFeedbackReset.restart()
                                     openSettingsTimer.restart()
                                     event.accepted = true
@@ -1276,7 +1327,7 @@ Item {
 
                         Keys.onReleased: function(event) {
                             if (plasmoid.configuration.KeyboardNavigation && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
-                                keyboardPressed = false
+                                fullRoot.settingsButtonKeyboardPressed = false
                                 settingsKeyboardFeedbackReset.stop()
                                 event.accepted = true
                             }
@@ -1313,7 +1364,7 @@ Item {
                                 anchors.fill: parent
                                 color: PlasmaCore.Theme.highlightColor
                                 radius: 4
-                                opacity: (settingsArea.pressed || settingsButtonInSidebar.keyboardPressed) ? 1.0 : (((settingsArea.containsMouse) || settingsButtonInSidebar.activeFocus) ? 0.2 : 0)
+                                opacity: (settingsArea.pressed || fullRoot.settingsButtonKeyboardPressed) ? 1.0 : (((settingsArea.containsMouse) || settingsButtonInSidebar.activeFocus) ? 0.2 : 0)
                             }
                             Rectangle {
                                 anchors.fill: parent
@@ -1373,32 +1424,24 @@ Item {
                         focusPolicy: Qt.StrongFocus
                         activeFocusOnTab: plasmoid.configuration.KeyboardNavigation
                         KeyNavigation.backtab: plasmoid.configuration.KeyboardNavigation ? settingsButtonInSidebar : null
-                        KeyNavigation.tab: plasmoid.configuration.KeyboardNavigation ? (categoryRepeater.count > 0 ? (categoryRepeater.itemAt(0) ? categoryRepeater.itemAt(0) : emojiGridView) : emojiGridView) : null
-                        KeyNavigation.down: plasmoid.configuration.KeyboardNavigation ? (categoryRepeater.count > 0 ? (categoryRepeater.itemAt(0) ? categoryRepeater.itemAt(0) : emojiGridView) : emojiGridView) : null
+                        KeyNavigation.tab: plasmoid.configuration.KeyboardNavigation ? (categoryListView.count > 0 ? (categoryListView.itemAtIndex(0) ? categoryListView.itemAtIndex(0) : emojiGridView) : emojiGridView) : null
+                        KeyNavigation.down: plasmoid.configuration.KeyboardNavigation ? (categoryListView.count > 0 ? (categoryListView.itemAtIndex(0) ? categoryListView.itemAtIndex(0) : emojiGridView) : emojiGridView) : null
                         KeyNavigation.up: plasmoid.configuration.KeyboardNavigation ? settingsButtonInSidebar : null
                         KeyNavigation.right: plasmoid.configuration.KeyboardNavigation ? emojiGridView : null
 
-                        property bool keyboardPressed: false
+
 
                         onClicked: {
                             fullRoot.sidebarExpanded = !fullRoot.sidebarExpanded
                             if (!plasmoid.configuration.KeyboardNavigation) {
                                 activeFocus = false
-                                if (categoryRepeater.count > 0) {
-                                    for (let i = 0; i < categoryRepeater.count; i++) {
-                                        const button = categoryRepeater.itemAt(i);
-                                        if (button && button.activeFocus) {
-                                            button.activeFocus = false;
-                                        }
-                                    }
-                                }
                             }
                         }
 
                         Keys.onPressed: function(event) {
                             if (!plasmoid.configuration.KeyboardNavigation) return
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    keyboardPressed = true
+                                    fullRoot.sidebarButtonKeyboardPressed = true
                                     fullRoot.sidebarExpanded = !fullRoot.sidebarExpanded
                                     event.accepted = true
                                 } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right ||
@@ -1410,7 +1453,7 @@ Item {
 
                         Keys.onReleased: function(event) {
                             if (plasmoid.configuration.KeyboardNavigation && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
-                                keyboardPressed = false
+                                fullRoot.sidebarButtonKeyboardPressed = false
                                 event.accepted = true
                             }
                         }
@@ -1425,14 +1468,6 @@ Item {
                                     fullRoot.sidebarExpanded = !fullRoot.sidebarExpanded
                                     if (!plasmoid.configuration.KeyboardNavigation) {
                                         parent.activeFocus = false
-                                        if (categoryRepeater.count > 0) {
-                                            for (let i = 0; i < categoryRepeater.count; i++) {
-                                                const button = categoryRepeater.itemAt(i);
-                                                if (button && button.activeFocus) {
-                                                    button.activeFocus = false;
-                                                }
-                                            }
-                                        }
                                     }
                                 }
                             }
@@ -1456,7 +1491,7 @@ Item {
                                 anchors.fill: parent
                                 color: PlasmaCore.Theme.highlightColor
                                 radius: 4
-                                opacity: (sidebarToggleArea.pressed || sidebarToggleButton.keyboardPressed) ? 1.0 : (((sidebarToggleArea.containsMouse) || sidebarToggleButton.activeFocus) ? 0.2 : 0)
+                                opacity: (sidebarToggleArea.pressed || fullRoot.sidebarButtonKeyboardPressed) ? 1.0 : (((sidebarToggleArea.containsMouse) || sidebarToggleButton.activeFocus) ? 0.2 : 0)
                             }
                             Rectangle {
                                 anchors.fill: parent
@@ -1507,7 +1542,8 @@ Item {
                     }
 
                     // Category List
-                    ScrollView {
+                    ListView {
+                        id: categoryListView
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -1515,213 +1551,161 @@ Item {
                         anchors.topMargin: 96
                         clip: true
 
-                        ScrollBar.vertical.policy: ScrollBar.AlwaysOff
-                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        model: categoryModel
+                        spacing: 2
+                        boundsBehavior: Flickable.StopAtBounds
 
-                        Column {
-                            id: categoryColumn
-                            width: parent.width
-                            spacing: 2
+                        ScrollBar.vertical: ScrollBar {
+                            active: categoryListView.moving || categoryListView.contentHeight > categoryListView.height
+                        }
 
-                            Repeater {
-                                id: categoryRepeater
-                                model: categoryModel
+                        displaced: Transition {
+                            NumberAnimation { properties: "x,y"; duration: 100 }
+                        }
 
-                                delegate: PlasmaComponents.ToolButton {
-                                    id: categoryButton
-                                    implicitWidth: fullRoot.sidebarExpanded ? 180 : 32
-                                    implicitHeight: 32
-                                    focusPolicy: Qt.StrongFocus
-                                    activeFocusOnTab: plasmoid.configuration.KeyboardNavigation
-                                    KeyNavigation.tab: plasmoid.configuration.KeyboardNavigation ? (index + 1 < categoryRepeater.count ? (categoryRepeater.itemAt(index + 1) ? categoryRepeater.itemAt(index + 1) : emojiGridView) : emojiGridView) : null
-                                    KeyNavigation.backtab: plasmoid.configuration.KeyboardNavigation ? (index === 0 ? sidebarToggleButton : (categoryRepeater.itemAt(index - 1) ? categoryRepeater.itemAt(index - 1) : sidebarToggleButton)) : null
-                                    KeyNavigation.down: plasmoid.configuration.KeyboardNavigation ? (index + 1 < categoryRepeater.count ? (categoryRepeater.itemAt(index + 1) ? categoryRepeater.itemAt(index + 1) : emojiGridView) : emojiGridView) : null
-                                    KeyNavigation.up: plasmoid.configuration.KeyboardNavigation ? (index === 0 ? sidebarToggleButton : (categoryRepeater.itemAt(index - 1) ? categoryRepeater.itemAt(index - 1) : sidebarToggleButton)) : null
-                                    KeyNavigation.right: plasmoid.configuration.KeyboardNavigation ? emojiGridView : null
+                        delegate: PlasmaComponents.ToolButton {
+                            id: categoryButton
+                            width: categoryListView.width
+                            implicitHeight: 32
+                            
+                            focusPolicy: Qt.StrongFocus
+                            activeFocusOnTab: plasmoid.configuration.KeyboardNavigation
+                            
+                            // Keyboard Navigation Logic
+                            KeyNavigation.tab: plasmoid.configuration.KeyboardNavigation ? (index + 1 < categoryListView.count ? (categoryListView.itemAtIndex(index + 1) ? categoryListView.itemAtIndex(index + 1) : emojiGridView) : emojiGridView) : null
+                            KeyNavigation.backtab: plasmoid.configuration.KeyboardNavigation ? (index === 0 ? sidebarToggleButton : (categoryListView.itemAtIndex(index - 1) ? categoryListView.itemAtIndex(index - 1) : sidebarToggleButton)) : null
+                            KeyNavigation.down: plasmoid.configuration.KeyboardNavigation ? (index + 1 < categoryListView.count ? (categoryListView.itemAtIndex(index + 1) ? categoryListView.itemAtIndex(index + 1) : emojiGridView) : emojiGridView) : null
+                            KeyNavigation.up: plasmoid.configuration.KeyboardNavigation ? (index === 0 ? sidebarToggleButton : (categoryListView.itemAtIndex(index - 1) ? categoryListView.itemAtIndex(index - 1) : sidebarToggleButton)) : null
+                            KeyNavigation.right: plasmoid.configuration.KeyboardNavigation ? emojiGridView : null
 
-                                    property bool isSelected: fullRoot.selectedCategory === model.name
-                                    property bool isDragging: false
-                                    readonly property bool dragEnabled: true
 
-                                    opacity: isDragging ? 0.3 : 1.0
 
-                                    onClicked: fullRoot.selectedCategory = model.name
+                            opacity: fullRoot.isCategoryDragging(index) ? 0.3 : 1.0
+                            
+                            // Visual State
+                            background: Item {
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: PlasmaCore.Theme.backgroundColor
+                                    radius: 4
+                                    opacity: 0.05
+                                }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: PlasmaCore.Theme.highlightColor
+                                    radius: 4
+                                    opacity: (fullRoot.isCategorySelected(model.name) || fullRoot.isCategoryDragging(index) || dragArea.pressed) ? 1.0 :
+                                    (((dragArea.containsMouse && !fullRoot.isCategorySelected(model.name) && !fullRoot.isAnyCategoryDragging) || categoryButton.activeFocus) ? 0.2 : 0)
+                                }
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: "transparent"
+                                    radius: 4
+                                    border.width: ((fullRoot.isCategorySelected(model.name) || dragArea.pressed || fullRoot.isCategoryDragging(index)) ||
+                                    (dragArea.containsMouse && !fullRoot.isCategorySelected(model.name) && !fullRoot.isAnyCategoryDragging) ||
+                                    categoryButton.activeFocus) ? 2 : 0
+                                    border.color: PlasmaCore.Theme.highlightColor
+                                }
+                            }
 
-                                    Keys.onPressed: function(event) {
-                                        if (!plasmoid.configuration.KeyboardNavigation) return
-                                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                                fullRoot.selectedCategory = model.name
-                                                event.accepted = true
-                                            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right ||
-                                                event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-                                                var handled = fullRoot.handleEmojiNavigationFromTextInput(event)
-                                                if (handled) event.accepted = true
-                                                }
+                            contentItem: Item {
+                                Kirigami.Icon {
+                                    x: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: model.icon
+                                    width: Kirigami.Units.iconSizes.smallMedium + 2
+                                    height: Kirigami.Units.iconSizes.smallMedium + 2
+                                    color: fullRoot.isCategorySelected(model.name) ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
+                                    visible: !fullRoot.sidebarExpanded
+                                }
+
+                                Row {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 4
+                                    visible: fullRoot.sidebarExpanded
+                                    spacing: 6
+
+                                    Kirigami.Icon {
+                                        source: model.icon
+                                        width: Kirigami.Units.iconSizes.smallMedium + 2
+                                        height: Kirigami.Units.iconSizes.smallMedium + 2
+                                        color: fullRoot.isCategorySelected(model.name) ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
+                                        anchors.verticalCenter: parent.verticalCenter
                                     }
 
-                                    background: Item {
-                                        anchors.fill: parent
-                                        anchors.margins: 4
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: PlasmaCore.Theme.backgroundColor
-                                            radius: 4
-                                            opacity: 0.05
-                                        }
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: PlasmaCore.Theme.highlightColor
-                                            radius: 4
-                                            opacity: (categoryButton.isSelected || categoryButton.isDragging || dragArea.pressed) ? 1.0 :
-                                            (((dragArea.containsMouse && !categoryButton.isSelected && !fullRoot.isAnyCategoryDragging) || categoryButton.activeFocus) ? 0.2 : 0)
-                                        }
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            color: "transparent"
-                                            radius: 4
-                                            border.width: ((categoryButton.isSelected || dragArea.pressed || categoryButton.isDragging) ||
-                                            (dragArea.containsMouse && !categoryButton.isSelected && !fullRoot.isAnyCategoryDragging) ||
-                                            categoryButton.activeFocus) ? 2 : 0
-                                            border.color: PlasmaCore.Theme.highlightColor
+                                    Text {
+                                        text: model.displayName
+                                        color: fullRoot.isCategorySelected(model.name) ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
+                                        font.bold: false
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
+
+                            PlasmaComponents.ToolTip {
+                                text: fullRoot.sidebarExpanded ? "" : model.displayName
+                            }
+                            
+                            onClicked: fullRoot.selectedCategory = model.name
+
+                            MouseArea {
+                                id: dragArea
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                hoverEnabled: true
+                                cursorShape: fullRoot.isCategoryDragging(index) ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                                
+                                property int draggedIndex: -1
+                                
+                                onPressAndHold: function(mouse) {
+                                    if (mouse.button === Qt.LeftButton) {
+                                        fullRoot.draggedCategoryIndex = index
+                                        fullRoot.isAnyCategoryDragging = true
+                                    }
+                                }
+
+                                onPositionChanged: {
+                                    if (fullRoot.isCategoryDragging(index)) {
+                                        var globalPos = mapToItem(categoryListView, mouseX, mouseY)                   
+                                        var targetIndex = categoryListView.indexAt(10, globalPos.y + categoryListView.contentY) // x=10 as safety for list width
+                                        if (targetIndex !== -1 && targetIndex !== index) {
+                                            categoryModel.move(index, targetIndex, 1)
+                                            fullRoot.draggedCategoryIndex = targetIndex
                                         }
                                     }
+                                }
 
-                                    contentItem: Item {
-                                        Kirigami.Icon {
-                                            x: 4
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            source: model.icon
-                                            width: Kirigami.Units.iconSizes.smallMedium + 2
-                                            height: Kirigami.Units.iconSizes.smallMedium + 2
-                                            color: categoryButton.isSelected ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
-                                            visible: !fullRoot.sidebarExpanded
-                                        }
-
-                                        Row {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 4
-                                            visible: fullRoot.sidebarExpanded
-                                            spacing: 6
-
-                                            Kirigami.Icon {
-                                                source: model.icon
-                                                width: Kirigami.Units.iconSizes.smallMedium + 2
-                                                height: Kirigami.Units.iconSizes.smallMedium + 2
-                                                color: categoryButton.isSelected ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
-                                                anchors.verticalCenter: parent.verticalCenter
-                                            }
-
-                                            Text {
-                                                text: model.displayName
-                                                color: categoryButton.isSelected ? PlasmaCore.Theme.highlightedTextColor : PlasmaCore.Theme.textColor
-                                                font.bold: false
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                elide: Text.ElideRight
-                                            }
-                                        }
+                                onReleased: {
+                                    if (fullRoot.isCategoryDragging(index)) {
+                                        fullRoot.draggedCategoryIndex = -1
+                                        draggedIndex = -1
+                                        fullRoot.saveCategoryOrder()
+                                        fullRoot.isAnyCategoryDragging = false
                                     }
-
-                                    PlasmaComponents.ToolTip {
-                                        text: fullRoot.sidebarExpanded ? "" : model.displayName
+                                }
+                                
+                                onCanceled: {
+                                    if (fullRoot.isCategoryDragging(index)) {
+                                        fullRoot.draggedCategoryIndex = -1
+                                        draggedIndex = -1
+                                        fullRoot.isAnyCategoryDragging = false
                                     }
+                                }
 
-                                    MouseArea {
-                                        id: dragArea
-                                        anchors.fill: parent
-                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                        hoverEnabled: true
-                                        cursorShape: categoryButton.isDragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
-                                        pressAndHoldInterval: 500
-                                        preventStealing: true
-                                        propagateComposedEvents: false
-
-                                        property int draggedIndex: -1
-                                        property real startY: 0
-                                        property bool dragInitialized: false
-
-                                        Timer {
-                                            id: dragInitTimer
-                                            interval: 50
-                                            onTriggered: {
-                                                dragArea.dragInitialized = true
-                                            }
+                                onClicked: {
+                                    if (mouse.button === Qt.RightButton) {
+                                        if (model.name === "Recent") {
+                                            recentContextMenu.popup(dragArea, mouse.x, mouse.y)
+                                        } else if (model.name === "Favorites") {
+                                            favoritesContextMenu.popup(dragArea, mouse.x, mouse.y)
                                         }
-
-                                        onPressAndHold: function(mouse) {
-                                            if (mouse.button === Qt.LeftButton && categoryButton.dragEnabled) {
-                                                draggedIndex = index
-                                                startY = mouseY
-                                                categoryButton.isDragging = true
-                                                dragInitialized = false
-                                                dragInitTimer.restart()
-                                                fullRoot.isAnyCategoryDragging = true
-                                            }
-                                        }
-
-                                        onPositionChanged: {
-                                            if (categoryButton.isDragging && dragInitialized) {
-                                                var globalMousePos = mapToItem(fullRoot, mouseX, mouseY)
-                                                var columnPos = categoryColumn.mapFromItem(fullRoot, globalMousePos.x, globalMousePos.y)
-                                                var itemHeight = categoryButton.height + categoryColumn.spacing
-                                                var targetIndex = Math.floor(columnPos.y / itemHeight)
-                                                targetIndex = Math.max(0, Math.min(targetIndex, categoryRepeater.count - 1))
-
-                                                if (targetIndex !== index && draggedIndex >= 0) {
-                                                    var targetCenterY = (targetIndex * itemHeight) + (itemHeight / 2)
-                                                    if (Math.abs(columnPos.y - targetCenterY) > itemHeight * 0.4) {
-                                                        var actualDraggedIndex = -1
-                                                        for (var i = 0; i < categoryRepeater.count; i++) {
-                                                            var item = categoryRepeater.itemAt(i)
-                                                            if (item && item.isDragging) {
-                                                                actualDraggedIndex = i
-                                                                break
-                                                            }
-                                                        }
-
-                                                        if (actualDraggedIndex !== -1 && targetIndex !== actualDraggedIndex) {
-                                                            categoryModel.move(actualDraggedIndex, targetIndex, 1)
-                                                            draggedIndex = targetIndex
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        onReleased: {
-                                            if (categoryButton.isDragging) {
-                                                categoryButton.isDragging = false
-                                                draggedIndex = -1
-                                                dragInitialized = false
-                                                dragInitTimer.stop()
-                                                fullRoot.saveCategoryOrder()
-                                                fullRoot.isAnyCategoryDragging = false
-                                            }
-                                        }
-
-                                        onCanceled: {
-                                            if (categoryButton.isDragging) {
-                                                categoryButton.isDragging = false
-                                                draggedIndex = -1
-                                                dragInitialized = false
-                                                dragInitTimer.stop()
-                                                fullRoot.isAnyCategoryDragging = false
-                                            }
-                                        }
-
-                                        onClicked: {
-                                            if (mouse.button === Qt.RightButton) {
-                                                if (model.name === "Recent") {
-                                                    recentContextMenu.popup(dragArea, mouse.x, mouse.y)
-                                                    mouse.accepted = true
-                                                } else if (model.name === "Favorites") {
-                                                    favoritesContextMenu.popup(dragArea, mouse.x, mouse.y)
-                                                    mouse.accepted = true
-                                                }
-                                            } else if (!categoryButton.isDragging) {
-                                                fullRoot.selectedCategory = model.name
-                                            }
-                                        }
+                                        mouse.accepted = true
+                                    } else if (!fullRoot.isCategoryDragging(index)) {
+                                        fullRoot.selectedCategory = model.name
                                     }
                                 }
                             }
@@ -1740,8 +1724,6 @@ Item {
                 id: emojiArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-
-                readonly property bool showEmojiScrollBar: emojiGridView && emojiGridView.contentHeight > emojiGridView.height + 1
 
                 RowLayout {
                     anchors.fill: parent
@@ -1764,15 +1746,13 @@ Item {
                         keyNavigationEnabled: fullRoot.emojiKeyboardNavigationEnabled
                         keyNavigationWraps: fullRoot.emojiKeyboardNavigationEnabled
 
-                        property bool isMouseOver: false
-                        property bool keyboardActionPressed: false
-                        property bool externalKeyboardActionPressed: false
+
 
                         Timer {
                             id: mouseOverExitTimer
                             interval: 100
                             onTriggered: {
-                                emojiGridView.isMouseOver = false
+                                fullRoot.gridIsMouseOver = false
                                 if (fullRoot.emojiHoveredEmojiKey !== "") {
                                     fullRoot.emojiLastHoveredEmojiKey = fullRoot.emojiHoveredEmojiKey
                                     fullRoot.emojiHoveredEmojiKey = ""
@@ -1784,7 +1764,7 @@ Item {
 
                         function setMouseOver() {
                             mouseOverExitTimer.stop()
-                            isMouseOver = true
+                            fullRoot.gridIsMouseOver = true
                         }
 
                         function setMouseExit() {
@@ -1792,11 +1772,11 @@ Item {
                         }
 
                         function triggerExternalFeedback() {
-                            externalKeyboardActionPressed = true
+                            fullRoot.gridExternalKeyboardActionPressed = true
                         }
 
                         function cancelExternalFeedback() {
-                            externalKeyboardActionPressed = false
+                            fullRoot.gridExternalKeyboardActionPressed = false
                         }
 
                         function updateKeyboardHover() {
@@ -1837,7 +1817,7 @@ Item {
                             if (!fullRoot.emojiKeyboardNavigationEnabled) return
 
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Select) {
-                                    emojiGridView.keyboardActionPressed = true
+                                    fullRoot.gridKeyboardActionPressed = true
                                     if (currentIndex >= 0 && currentIndex < fullRoot.emojiViewModel.length) {
                                         const item = fullRoot.emojiViewModel[currentIndex]
                                         const isCtrl = event.modifiers & Qt.ControlModifier
@@ -1873,7 +1853,7 @@ Item {
                         Keys.onReleased: function(event) {
                             if (fullRoot.emojiKeyboardNavigationEnabled &&
                                 (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Select)) {
-                                emojiGridView.keyboardActionPressed = false
+                                fullRoot.gridKeyboardActionPressed = false
                                 }
                         }
 
@@ -1943,13 +1923,6 @@ Item {
                             width: fullRoot.internalGridSize
                             height: fullRoot.internalGridSize
 
-                            readonly property bool isSelected: fullRoot.selectedEmojis.indexOf(modelData.emoji) >= 0
-                            readonly property bool isKeyboardFocus: GridView.isCurrentItem && emojiGridView.activeFocus
-                            readonly property bool isKeyboardPressed: GridView.isCurrentItem && (emojiGridView.keyboardActionPressed || emojiGridView.externalKeyboardActionPressed)
-                            readonly property bool isLastHovered: fullRoot.emojiLastHoveredEmojiKey === modelData.emoji && !emojiGridView.isMouseOver
-                            readonly property bool isGlobalHover: fullRoot.emojiHoveredEmojiKey === modelData.emoji
-                            property bool isLocallyHovered: false
-
                             Item {
                                 anchors.fill: parent
                                 anchors.margins: 2
@@ -1965,15 +1938,15 @@ Item {
                                     anchors.fill: parent
                                     color: PlasmaCore.Theme.highlightColor
                                     radius: 4
-                                    opacity: (mouseArea.pressed || isSelected || isKeyboardPressed) ? 1.0 :
-                                    (isLocallyHovered || isGlobalHover || isKeyboardFocus || isLastHovered ? 0.2 : 0)
+                                    opacity: (mouseArea.pressed || fullRoot.isEmojiSelected(modelData.emoji) || fullRoot.isEmojiKeyboardPressed(GridView.isCurrentItem)) ? 1.0 :
+                                    (mouseArea.containsMouse || fullRoot.isEmojiHovered(modelData.emoji, fullRoot.gridIsMouseOver) || fullRoot.isEmojiKeyboardFocused(GridView.isCurrentItem, emojiGridView.activeFocus) || fullRoot.isEmojiLastHovered(modelData.emoji, fullRoot.gridIsMouseOver) ? 0.2 : 0)
                                 }
 
                                 Rectangle {
                                     anchors.fill: parent
                                     color: "transparent"
                                     radius: 4
-                                    border.width: (mouseArea.pressed || isSelected || isLocallyHovered || isGlobalHover || isKeyboardFocus || isLastHovered || isKeyboardPressed) ? 2 : 0
+                                    border.width: (mouseArea.pressed || fullRoot.isEmojiSelected(modelData.emoji) || mouseArea.containsMouse || fullRoot.isEmojiHovered(modelData.emoji, fullRoot.gridIsMouseOver) || fullRoot.isEmojiKeyboardFocused(GridView.isCurrentItem, emojiGridView.activeFocus) || fullRoot.isEmojiLastHovered(modelData.emoji, fullRoot.gridIsMouseOver) || fullRoot.isEmojiKeyboardPressed(GridView.isCurrentItem)) ? 2 : 0
                                     border.color: PlasmaCore.Theme.highlightColor
                                 }
                             }
@@ -1994,7 +1967,6 @@ Item {
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                                 onEntered: {
-                                    isLocallyHovered = true
                                     fullRoot.emojiHoveredEmojiKey = modelData.emoji
                                     fullRoot.hoveredEmoji = modelData.emoji
                                     fullRoot.hoveredEmojiName = modelData.name
@@ -2008,7 +1980,6 @@ Item {
                                 }
 
                                 onExited: {
-                                    isLocallyHovered = false
                                     if (fullRoot.emojiHoveredEmojiKey === modelData.emoji) {
                                         fullRoot.emojiLastHoveredEmojiKey = modelData.emoji
                                     }
@@ -2185,12 +2156,12 @@ Item {
         enabled: true
         onActivated: {
             if (!plasmoid.configuration.KeyboardNavigation) return
-                if (typeof getCurrentFocusedEmoji === "function") {
-                    var currentEmoji = getCurrentFocusedEmoji();
-                    if (currentEmoji && currentEmoji.emoji) {
-                        handleEmojiSelected(currentEmoji.emoji, true);
-                    }
+            if (typeof getCurrentFocusedEmoji === "function") {
+                var currentEmoji = getCurrentFocusedEmoji();
+                if (currentEmoji && currentEmoji.emoji) {
+                    handleEmojiSelected(currentEmoji.emoji, true);
                 }
+            }
         }
     }
 }
