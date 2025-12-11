@@ -135,6 +135,10 @@ Item {
     // Category Drag State
     property int draggedCategoryIndex: -1
 
+    // =========================================================================
+    // Logic
+    // =========================================================================
+
     Settings {
         id: settings
         category: "RecentEmojis"
