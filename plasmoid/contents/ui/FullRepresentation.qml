@@ -38,6 +38,7 @@ Item {
     // Search & Feedback
     property string hoveredEmoji: ""
     property string hoveredEmojiName: ""
+    property int keyboardPressedIndex: -1
     property string defaultPastePlaceholder: i18n("Paste emojis…")
     property string searchPlaceholderText: i18n("Search emojis…")
     property bool searchPlaceholderMessageActive: false
@@ -1616,9 +1617,6 @@ Item {
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 hoverEnabled: true
                                 cursorShape: fullRoot.isCategoryDragging(index) ? Qt.ClosedHandCursor : Qt.ArrowCursor
-                                
-                                property int draggedIndex: -1
-                                
                                 onPressAndHold: function(mouse) {
                                     if (mouse.button === Qt.LeftButton) {
                                         fullRoot.draggedCategoryIndex = index
@@ -1640,7 +1638,6 @@ Item {
                                 onReleased: {
                                     if (fullRoot.isCategoryDragging(index)) {
                                         fullRoot.draggedCategoryIndex = -1
-                                        draggedIndex = -1
                                         fullRoot.saveCategoryOrder()
                                         fullRoot.isAnyCategoryDragging = false
                                     }
@@ -1649,7 +1646,6 @@ Item {
                                 onCanceled: {
                                     if (fullRoot.isCategoryDragging(index)) {
                                         fullRoot.draggedCategoryIndex = -1
-                                        draggedIndex = -1
                                         fullRoot.isAnyCategoryDragging = false
                                     }
                                 }
@@ -1704,8 +1700,6 @@ Item {
                         activeFocusOnTab: fullRoot.emojiKeyboardNavigationEnabled
                         keyNavigationEnabled: fullRoot.emojiKeyboardNavigationEnabled
                         keyNavigationWraps: fullRoot.emojiKeyboardNavigationEnabled
-
-                        property int keyboardPressedIndex: -1
 
                         Timer {
                             id: mouseOverExitTimer
@@ -1776,7 +1770,7 @@ Item {
                             if (!fullRoot.emojiKeyboardNavigationEnabled) return
 
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Select) {
-                                    emojiGridView.keyboardPressedIndex = currentIndex
+                                    fullRoot.keyboardPressedIndex = currentIndex
                                     fullRoot.gridKeyboardActionPressed = true
                                     event.accepted = true
                                 } else if (event.key === Qt.Key_Space) {
@@ -1808,7 +1802,7 @@ Item {
                             if (fullRoot.emojiKeyboardNavigationEnabled &&
                                 (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Select)) {
                                 fullRoot.gridKeyboardActionPressed = false
-                                emojiGridView.keyboardPressedIndex = -1
+                                fullRoot.keyboardPressedIndex = -1
                                 if (currentIndex >= 0 && currentIndex < fullRoot.emojiViewModel.length) {
                                     const item = fullRoot.emojiViewModel[currentIndex]
                                     const isCtrl = event.modifiers & Qt.ControlModifier
@@ -1904,7 +1898,7 @@ Item {
                                     anchors.fill: parent
                                     color: PlasmaCore.Theme.highlightColor
                                     radius: 4
-                                    opacity: (mouseArea.pressed || fullRoot.isEmojiSelected(modelData.emoji) || fullRoot.isEmojiKeyboardPressed(GridView.isCurrentItem) || (index === emojiGridView.keyboardPressedIndex)) ? 1.0 :
+                                    opacity: (mouseArea.pressed || fullRoot.isEmojiSelected(modelData.emoji) || fullRoot.isEmojiKeyboardPressed(GridView.isCurrentItem) || (index === fullRoot.keyboardPressedIndex)) ? 1.0 :
                                     (mouseArea.containsMouse || (emojiGridView.activeFocus && (fullRoot.isEmojiKeyboardFocused(GridView.isCurrentItem, emojiGridView.activeFocus) || fullRoot.isEmojiHovered(modelData.emoji, fullRoot.gridIsMouseOver) || fullRoot.isEmojiLastHovered(modelData.emoji, fullRoot.gridIsMouseOver)))) ? 0.2 : 0
                                 }
 
